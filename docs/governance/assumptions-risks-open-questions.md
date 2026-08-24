@@ -30,7 +30,7 @@
 - Citation correctness degrades across edits: immutable lineage, proposal validation, and regression datasets.
 - Documentation drift during autonomous implementation: root `AGENTS.md`, traceability gates, and same-change documentation policy.
 - Framework API drift: pin dependencies and check `docs/ref/deepagents/` plus current official docs before upgrades.
-- Local execution uses explicit deterministic adapters because this environment does not have the pinned `deepagents` or `langgraph.checkpoint.postgres` packages installed. The application refuses to imply production readiness for those providers; optional pinned adapters are implemented and real-service release evidence remains open.
+- Local execution uses explicit deterministic adapters by default. The main development environment does not install the optional provider extras; an isolated probe environment installed the pinned `deepagents`, Postgres checkpoint, S3, Langfuse, and provider packages and compiled a fake-model graph. Live credentials/service evidence remains open.
 - Ingestion uses a durable leased job/state-machine processor and `ingestion_worker.py --once`; the local API completes small jobs synchronously through that same processor. Export remains synchronous locally, while backup/restore, load, OCR, and failure-injection exercises remain release work.
 
 ## Naming note

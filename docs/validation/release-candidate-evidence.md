@@ -12,6 +12,7 @@ sign-off. It was refreshed on 2026-08-25 from the repository root.
 | Frontend build | `cd frontend; npm run build` | Passed |
 | Frontend dependency audit | `cd frontend; npm audit --omit=dev` | 0 vulnerabilities |
 | Python environment audit | `python -m pip check` | Existing environment conflict: `streamlit 1.43.1` requires `protobuf<6`, installed environment has `protobuf 6.31.1`; unrelated to Groundloom's declared dependencies and should be resolved in a clean release environment. |
+| Optional provider API contract | Isolated probe venv with `.[agent,postgres,storage,observability]`; fake-model Deep Agents graph compile | Pinned packages installed cleanly; `CompiledStateGraph` compile passed without provider credentials. |
 | Deterministic evaluation | `python backend/scripts/run_evals.py` | 1 pass / 1 intentional needs-revision regression case; redacted `evaluation.completed` observation emitted |
 | Retrieval envelope | `python backend/scripts/benchmark_local.py --requests 20` | Synthetic SQLite/filesystem p50/p95 emitted; not a production SLO |
 | Migration | `python backend/scripts/migrate.py`, `python backend/scripts/verify_migrations.py`, and migration status query | `001_initial_domain_schema`, `002_ingestion_jobs_and_provider_adapters` |

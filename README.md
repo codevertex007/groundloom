@@ -50,6 +50,11 @@ their environment variables from `.env.example`:
 python -m pip install -e ".[dev,documents,postgres,agent,storage,observability]"
 ```
 
+Set the provider SDK credential required by the selected model (`OPENAI_API_KEY`,
+`ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY`) only in the runtime environment. A
+missing provider credential produces a retryable dependency error; local mode
+continues to use the deterministic adapter.
+
 In a second terminal:
 
 ```powershell
