@@ -17,6 +17,7 @@ POST     /skill-versions/{id}/validate    POST /skill-versions/{id}/publish
 POST     /patches/{id}/accept             POST /patches/{id}/reject
 POST     /exports                         GET /exports/{id}
 POST     /source-versions/{id}/index-rebuilds  GET /index-rebuilds/{job_id}
+GET/PUT  /workspace/retention-policy
 ```
 
 Use 400 invalid request, 401 unauthenticated, 403 authorized identity lacking action without existence leak, 404 accessible resource absent, 409 version/state/idempotency conflict, 422 domain validation, 429 budget/rate, 503 transient dependency. Error body follows `error-taxonomy.md`.

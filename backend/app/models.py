@@ -424,3 +424,5 @@ class DelegatedTask(TimeStamped, Base):
     input_refs: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
     result_refs: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)

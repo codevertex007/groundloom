@@ -81,6 +81,7 @@ python backend/scripts/ingestion_worker.py --once
 python backend/scripts/export_worker.py
 python backend/scripts/retention_worker.py
 python backend/scripts/index_worker.py
+python backend/scripts/delegated_worker.py
 
 # Optional disposable local recovery exercise
 cd ..

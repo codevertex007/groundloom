@@ -4,7 +4,7 @@ from pathlib import Path
 from app.config import Settings
 from app.context import RuntimeContext
 from app.main import create_app
-from app.models import DeletionRequest, ExportJob, Project, RetentionPolicy, SourceVersion
+from app.models import DeletionRequest, ExportJob, Project, SourceVersion
 from app.services import run_deletion_worker_once, run_export_worker_once
 from fastapi.testclient import TestClient
 
@@ -92,9 +92,13 @@ def test_legal_hold_blocks_deletion_without_removing_project(tmp_path: Path):
     deletion = api.post(
         f"/v1/projects/{project['id']}/deletion", headers=headers(), json={}
     ).json()
+    policy = api.put(
+        "/v1/workspace/retention-policy",
+        headers=headers(),
+        json={"legal_hold": True, "sources_days": 365, "projects_days": 365, "agent_data_days": 90, "exports_days": 7, "audit_days": 2555},
+    )
+    assert policy.status_code == 200 and policy.json()["legal_hold"] is True
     with app.state.session_factory() as db:
-        db.query(RetentionPolicy).filter_by(workspace_id="local-workspace").update({"legal_hold": True})
-        db.commit()
         ctx = RuntimeContext("local-user", "local-workspace", frozenset({"workspace_admin"}), "hold-worker")
         result = run_deletion_worker_once(db, ctx, settings, "test-hold-worker")
         assert result["blocked"] == 1

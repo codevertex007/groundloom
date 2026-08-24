@@ -20,6 +20,7 @@ if __name__ == "__main__":
             "002_ingestion_jobs_and_provider_adapters",
             "003_retention_deletion_and_export_leases",
             "004_index_rebuild_jobs",
+            "005_delegated_task_leases",
         ]
         if applied != expected:
             raise SystemExit(f"Unexpected migration sequence: {applied}")

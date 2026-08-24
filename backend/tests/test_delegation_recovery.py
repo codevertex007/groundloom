@@ -1,6 +1,8 @@
 from app.config import Settings
+from app.context import RuntimeContext
 from app.main import create_app
 from app.models import DelegatedTask
+from app.services import run_delegated_worker_once
 from fastapi.testclient import TestClient
 
 
@@ -46,6 +48,14 @@ def test_partial_delegation_retry_is_bounded_and_reconciled(tmp_path):
         )
         assert summary.status_code == 200
         assert summary.json()["counts"]["queued"] == 1
+        with app.state.session_factory() as db:
+            result = run_delegated_worker_once(
+                db,
+                RuntimeContext("local-user", "local-workspace", frozenset({"workspace_admin"}), "delegated-test"),
+                "delegated-test-worker",
+            )
+            assert result == {"claimed": 1, "completed": 1, "cancelled": 0, "failed": 0}
+            assert db.query(DelegatedTask).filter_by(id=task_id).one().status == "completed"
 
 
 def test_skill_author_endpoint_creates_draft_only_and_provider_failure_is_explicit(tmp_path):

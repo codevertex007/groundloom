@@ -18,6 +18,7 @@ sign-off. It was refreshed on 2026-08-25 from the repository root.
 | Retrieval envelope | `python backend/scripts/benchmark_local.py --requests 20` | Synthetic SQLite/filesystem p50/p95 emitted; not a production SLO |
 | Migration | `python backend/scripts/migrate.py`, `python backend/scripts/verify_migrations.py`, and migration status query | `001_initial_domain_schema`, `002_ingestion_jobs_and_provider_adapters`, `003_retention_deletion_and_export_leases`, `004_index_rebuild_jobs` |
 | Export/retention workers | `backend/tests/test_retention_and_export_workers.py` | Staging-shaped queued export completes through a leased worker; project deletion removes unshared source artifacts and canonical records with durable audit status |
+| Derived-index/delegated workers | `backend/tests/test_index_rebuild_worker.py`, `backend/tests/test_delegation_recovery.py` | Scoped lexical index rebuild and failed delegated-task retry are consumed by bounded leased workers |
 | Browser journey | Existing browser smoke evidence | Create → source-grounded draft → review → accept passed |
 
 ## Not locally executable

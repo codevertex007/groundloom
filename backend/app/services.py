@@ -60,6 +60,7 @@ from .schemas import (
     PassageOut,
     PatchCreate,
     ProjectCreate,
+    RetentionPolicyUpdate,
     SkillAuthorDraftCreate,
     SkillCreate,
     UploadFinalize,
@@ -826,6 +827,8 @@ def retry_delegated_task(db: Session, ctx: RuntimeContext, task_id: str) -> Dele
         )
     task.status = "queued"
     task.error_code = None
+    task.lease_owner = None
+    task.lease_until = None
     task.result_refs = {
         **task.result_refs,
         "attempts": attempts + 1,
@@ -849,6 +852,111 @@ def retry_delegated_task(db: Session, ctx: RuntimeContext, task_id: str) -> Dele
     )
     db.commit()
     return task
+
+
+def claim_delegated_tasks(
+    db: Session,
+    workspace_id: str,
+    worker_id: str,
+    *,
+    limit: int = 10,
+    lease_seconds: int = 300,
+) -> list[DelegatedTask]:
+    now = utcnow()
+    rows = (
+        db.query(DelegatedTask)
+        .filter(DelegatedTask.workspace_id == workspace_id)
+        .filter(
+            (DelegatedTask.status == "queued")
+            | ((DelegatedTask.status == "running") & (DelegatedTask.lease_until < now))
+        )
+        .order_by(DelegatedTask.created_at)
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+    for task in rows:
+        task.status = "running"
+        task.lease_owner = worker_id
+        task.lease_until = now + timedelta(seconds=lease_seconds)
+    db.commit()
+    return rows
+
+
+def process_delegated_task(
+    db: Session, ctx: RuntimeContext, task: DelegatedTask
+) -> DelegatedTask:
+    if task.workspace_id != ctx.workspace_id:
+        raise GroundloomError("FORBIDDEN", "The delegated task is outside the workspace scope.", 403)
+    run = db.query(AgentRun).filter_by(id=task.parent_run_id, workspace_id=ctx.workspace_id).first()
+    if not run or run.project_id != task.project_id:
+        raise GroundloomError("RESOURCE_NOT_FOUND", "The parent run was not found.", 404)
+    if run.cancel_requested or run.status == "cancelled":
+        task.status = "cancelled"
+        task.lease_owner = None
+        task.lease_until = None
+        db.commit()
+        return task
+    if task.status == "completed":
+        return task
+    append_event(
+        db,
+        ctx,
+        run,
+        "subagent.started",
+        {"task_id": task.id, "task_type": task.task_type, "status": "running"},
+    )
+    # The local specialist adapter returns only bounded structured references;
+    # production may replace this processor with a configured specialist model.
+    task.status = "completed"
+    task.result_refs = {
+        **task.result_refs,
+        "status": "proposal_reconciled",
+        "worker": "delegated-task-worker",
+    }
+    task.error_code = None
+    task.lease_owner = None
+    task.lease_until = None
+    append_event(
+        db,
+        ctx,
+        run,
+        "subagent.completed",
+        {"task_id": task.id, "task_type": task.task_type, "status": "completed"},
+    )
+    audit(db, ctx, "delegated_task.completed", "delegated_task", task.id, "Specialist task completed")
+    db.commit()
+    return task
+
+
+def run_delegated_worker_once(
+    db: Session, ctx: RuntimeContext, worker_id: str, *, limit: int = 10
+) -> dict[str, int]:
+    claimed = claim_delegated_tasks(db, ctx.workspace_id, worker_id, limit=limit)
+    completed = cancelled = failed = 0
+    for task in claimed:
+        try:
+            result = process_delegated_task(db, ctx, task)
+            if result.status == "completed":
+                completed += 1
+            elif result.status == "cancelled":
+                cancelled += 1
+        except Exception as exc:
+            db.rollback()
+            failed_task = db.query(DelegatedTask).filter_by(id=task.id, workspace_id=ctx.workspace_id).first()
+            if failed_task:
+                failed_task.status = "failed"
+                failed_task.error_code = exc.code if isinstance(exc, GroundloomError) else "DELEGATED_TASK_FAILED"
+                failed_task.lease_owner = None
+                failed_task.lease_until = None
+                audit(db, ctx, "delegated_task.failed", "delegated_task", failed_task.id, "Specialist task failed", "failure")
+                db.commit()
+            failed += 1
+    return {
+        "claimed": len(claimed),
+        "completed": completed,
+        "cancelled": cancelled,
+        "failed": failed,
+    }
 
 
 def reconcile_delegated_tasks(
@@ -2241,6 +2349,59 @@ def ensure_retention_policy(db: Session, workspace_id: str) -> RetentionPolicy:
         db.add(policy)
         db.flush()
     return policy
+
+
+def retention_policy_dto(policy: RetentionPolicy) -> dict[str, Any]:
+    return {
+        "workspace_id": policy.workspace_id,
+        "sources_days": policy.sources_days,
+        "projects_days": policy.projects_days,
+        "agent_data_days": policy.agent_data_days,
+        "exports_days": policy.exports_days,
+        "audit_days": policy.audit_days,
+        "legal_hold": policy.legal_hold,
+    }
+
+
+def get_retention_policy(db: Session, ctx: RuntimeContext) -> dict[str, Any]:
+    ctx.require(
+        "read retention policy",
+        {"viewer", "author", "reviewer", "workspace_admin", "organization_admin"},
+    )
+    policy = ensure_retention_policy(db, ctx.workspace_id)
+    db.commit()
+    return retention_policy_dto(policy)
+
+
+def update_retention_policy(
+    db: Session, ctx: RuntimeContext, body: RetentionPolicyUpdate
+) -> dict[str, Any]:
+    ctx.require("update retention policy", {"workspace_admin", "organization_admin"})
+    policy = ensure_retention_policy(db, ctx.workspace_id)
+    policy.sources_days = body.sources_days
+    policy.projects_days = body.projects_days
+    policy.agent_data_days = body.agent_data_days
+    policy.exports_days = body.exports_days
+    policy.audit_days = body.audit_days
+    policy.legal_hold = body.legal_hold
+    audit(
+        db,
+        ctx,
+        "retention.policy.updated",
+        "retention_policy",
+        ctx.workspace_id,
+        "Updated workspace retention policy",
+    )
+    outbox(
+        db,
+        ctx.workspace_id,
+        "RetentionPolicyUpdated",
+        "workspace",
+        ctx.workspace_id,
+        {"workspace_id": ctx.workspace_id, "legal_hold": policy.legal_hold},
+    )
+    db.commit()
+    return retention_policy_dto(policy)
 
 
 def request_project_deletion(

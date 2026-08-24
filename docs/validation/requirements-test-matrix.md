@@ -32,4 +32,6 @@ Release blocks on any active requirement without proof or explicitly approved ma
 
 Export worker proof: backend/tests/test_retention_and_export_workers.py::test_staging_export_is_queued_and_worker_completes.
 Deletion/retention proof: backend/tests/test_retention_and_export_workers.py::test_project_deletion_is_scoped_audited_and_removes_artifacts.
+Retention-policy proof: backend/tests/test_retention_and_export_workers.py::test_legal_hold_blocks_deletion_without_removing_project.
 Derived-index proof: backend/tests/test_index_rebuild_worker.py::test_index_rebuild_is_durable_idempotent_and_scoped.
+Delegation-worker proof: backend/tests/test_delegation_recovery.py::test_partial_delegation_retry_is_bounded_and_reconciled.

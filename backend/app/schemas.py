@@ -233,6 +233,25 @@ class DeletionRequestOut(ProductModel):
     completed_at: datetime | None = None
 
 
+class RetentionPolicyUpdate(BaseModel):
+    sources_days: int = Field(default=365, ge=1, le=36_500)
+    projects_days: int = Field(default=365, ge=1, le=36_500)
+    agent_data_days: int = Field(default=90, ge=1, le=36_500)
+    exports_days: int = Field(default=7, ge=1, le=36_500)
+    audit_days: int = Field(default=2555, ge=1, le=36_500)
+    legal_hold: bool = False
+
+
+class RetentionPolicyOut(ProductModel):
+    workspace_id: str
+    sources_days: int
+    projects_days: int
+    agent_data_days: int
+    exports_days: int
+    audit_days: int
+    legal_hold: bool
+
+
 class IndexRebuildOut(ProductModel):
     id: str
     source_version_id: str

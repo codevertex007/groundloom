@@ -15,3 +15,8 @@ bounded lease. A workspace RetentionPolicy legal hold blocks the workflow and
 is audited; failed object or database steps remain retryable. Production still
 requires review of backup expiry, trace deletion, external checkpoint deletion,
 and encrypted object-store lifecycle policies.
+
+Workspace administrators configure the local policy through the authorized
+workspace retention-policy endpoints. The policy validates bounded retention
+periods and legal-hold state, and updates are audited and emitted through the
+outbox before workers consume them.

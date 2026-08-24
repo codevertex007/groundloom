@@ -44,6 +44,8 @@ from .schemas import (
     ProjectCreate,
     ProjectDetail,
     ProjectOut,
+    RetentionPolicyOut,
+    RetentionPolicyUpdate,
     RunOut,
     SkillAuthorDraftCreate,
     SkillCreate,
@@ -62,6 +64,7 @@ from .services import (
     create_skill,
     execute_agent_turn,
     export_content,
+    get_retention_policy,
     list_skills,
     list_sources,
     patch_out,
@@ -79,6 +82,7 @@ from .services import (
     search_evidence,
     seed_local,
     start_run,
+    update_retention_policy,
     upload_source,
     validate_content,
     validate_skill,
@@ -738,6 +742,20 @@ def register_routes(app: FastAPI) -> FastAPI:
         ctx: RuntimeContext = Depends(get_ctx),
     ):
         return deletion_dto(request_project_deletion(db, ctx, project_id, body.idempotency_key))
+
+    @app.get("/v1/workspace/retention-policy", response_model=RetentionPolicyOut)
+    def retention_policy_get(
+        db: Session = Depends(get_db), ctx: RuntimeContext = Depends(get_ctx)
+    ):
+        return get_retention_policy(db, ctx)
+
+    @app.put("/v1/workspace/retention-policy", response_model=RetentionPolicyOut)
+    def retention_policy_put(
+        body: RetentionPolicyUpdate,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+    ):
+        return update_retention_policy(db, ctx, body)
 
     @app.get("/v1/deletions/{deletion_id}", response_model=DeletionRequestOut)
     def deletion_get(

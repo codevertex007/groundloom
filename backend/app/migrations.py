@@ -9,6 +9,7 @@ MIGRATION_ID = "001_initial_domain_schema"
 ADAPTERS_MIGRATION_ID = "002_ingestion_jobs_and_provider_adapters"
 RETENTION_EXPORT_MIGRATION_ID = "003_retention_deletion_and_export_leases"
 INDEX_REBUILD_MIGRATION_ID = "004_index_rebuild_jobs"
+DELEGATED_WORKER_MIGRATION_ID = "005_delegated_task_leases"
 
 
 def apply_migrations(database_url: str) -> None:
@@ -27,6 +28,7 @@ def apply_migrations(database_url: str) -> None:
             ADAPTERS_MIGRATION_ID,
             RETENTION_EXPORT_MIGRATION_ID,
             INDEX_REBUILD_MIGRATION_ID,
+            DELEGATED_WORKER_MIGRATION_ID,
         ]
         # create_all creates new tables but does not add columns to a prior
         # release. These additive columns are the only compatibility change in
@@ -43,6 +45,17 @@ def apply_migrations(database_url: str) -> None:
             if name not in existing_export_columns:
                 connection.execute(
                     text(f"ALTER TABLE export_jobs ADD COLUMN {name} {sql_type} DEFAULT {default}")
+                )
+        delegated_columns = {
+            column["name"] for column in inspect(engine).get_columns("delegated_tasks")
+        }
+        for name, sql_type, default in (
+            ("lease_owner", "VARCHAR(120)", "NULL"),
+            ("lease_until", timestamp_type, "NULL"),
+        ):
+            if name not in delegated_columns:
+                connection.execute(
+                    text(f"ALTER TABLE delegated_tasks ADD COLUMN {name} {sql_type} DEFAULT {default}")
                 )
         for migration_id in migration_ids:
             if database_url.startswith("sqlite"):
