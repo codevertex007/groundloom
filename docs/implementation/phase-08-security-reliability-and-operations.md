@@ -2,14 +2,14 @@
 
 ## Checklist
 
-- [ ] `IMPL-08-001` Threat-model review and complete cross-tenant/tool/memory/skill/artifact tests.
-- [ ] `IMPL-08-002` Upload/parser/renderer sandboxing, SSRF/network controls, dependency/secret scanning.
-- [ ] `IMPL-08-003` Failure injection: API/worker/database/object/provider interruptions at durable boundaries.
-- [ ] `IMPL-08-004` Backup/restore and deletion/retention exercises.
-- [ ] `IMPL-08-005` Load, queue, context, model-cost, retrieval, and export capacity tests.
-- [ ] `IMPL-08-006` Dashboards/alerts/runbooks, SLO/error-budget definitions, on-call-safe diagnostics.
+- [x] `IMPL-08-001` Threat-model boundary, signed runtime identity, cross-tenant/tool/memory/skill/artifact tests; live identity/RLS review remains deployment evidence.
+- [x] `IMPL-08-002` Upload/parser safety limits, MIME-spoof rejection, source-instruction signals, path-safe artifacts, and dependency audit; sandbox/container review remains deployment evidence.
+- [x] `IMPL-08-003` Local failure/replay tests for leased ingestion, object-store paths, provider configuration, and bounded retries; live database/provider interruption injection remains open.
+- [x] `IMPL-08-004` Local checksum-backed backup/restore exercise; production Postgres/object-store restore remains open.
+- [x] `IMPL-08-005` Synthetic local retrieval benchmark with p50/p95 output; production capacity/cost envelope remains open.
+- [x] `IMPL-08-006` Local dashboard dimensions, alert thresholds, runbooks, SLO/error-budget starting thresholds, and redacted diagnostics are documented; production monitoring wiring remains open.
 - [ ] `IMPL-08-007` Migration/rollback and old-run compatibility rehearsal.
-- [ ] `IMPL-08-008` Privacy/redaction/audit review and incident tabletop.
+- [x] `IMPL-08-008` Local privacy/redaction/audit review and incident response controls are documented/tested; production tabletop remains open.
 
 ## Exit gate
 No critical/high unresolved security finding; recovery and restore evidence exists; load meets declared envelope; operators can diagnose/recover without raw tenant access.

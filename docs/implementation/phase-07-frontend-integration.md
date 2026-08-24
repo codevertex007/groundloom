@@ -9,7 +9,7 @@
 - [x] `IMPL-07-005` Primary-agent panel with replay-safe events, todos, subagents, approvals, cancel/resume controls.
 - [x] `IMPL-07-006` Diff/review/accept/reject/conflict flows.
 - [x] `IMPL-07-007` Export/preview/settings/command palette.
-- [x] `IMPL-07-008` Accessibility-oriented keyboard, responsive, reconnect/error/empty states.
+- [x] `IMPL-07-008` Accessibility-oriented keyboard, responsive, reconnect/error/empty states; the shared client reconnects finite SSE replay with `Last-Event-ID` and exposes connection state.
 - [ ] `IMPL-07-009` Component, visual-regression where stable, and full e2e suite.
 
 ## Exit gate

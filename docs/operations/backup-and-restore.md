@@ -11,4 +11,9 @@ python backend/scripts/backup_local.py backup --database backend/data/groundloom
 python backend/scripts/backup_local.py restore --database backend/data/restored.db --objects backend/data/restored-objects --destination .local-backup
 ```
 
+Local backups include `manifest.json` with SHA-256 checksums for the database
+and every object. Restore verifies the manifest before the command succeeds;
+this is development evidence for integrity, not a substitute for an isolated
+encrypted Postgres/object-store restore rehearsal.
+
 The script is intentionally limited to local development. Production still requires encrypted Postgres/object-storage backups and an isolated restore rehearsal.

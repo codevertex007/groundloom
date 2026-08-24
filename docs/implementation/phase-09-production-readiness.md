@@ -9,7 +9,7 @@
 - [ ] `IMPL-09-005` Stage deployment, smoke, soak, rollback rehearsal, provider-degradation exercise.
 - [ ] `IMPL-09-006` Pilot rollout with feature flags, budgets, feedback, support/incident ownership.
 - [ ] `IMPL-09-007` Review launch metrics and expand gradually; preserve rollback/kill switches.
-- [ ] `IMPL-09-008` Publish release evidence, known limitations, operations handoff, and next roadmap.
+- [x] `IMPL-09-008` Publish local release evidence, known limitations, and operations handoff in `validation/release-candidate-evidence.md`; production sign-off remains external.
 
 ## Exit gate
 Release owner signs `validation/release-gates.md`; production smoke and rollback pass; no undocumented implementation/spec drift exists.

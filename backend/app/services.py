@@ -896,7 +896,11 @@ def upload_source(
         stage="queued",
     )
     db.add(ingestion_job)
-    process_ingestion_job(db, ctx, settings, ingestion_job, raw=raw)
+    try:
+        process_ingestion_job(db, ctx, settings, ingestion_job, raw=raw)
+    except GroundloomError:
+        db.commit()
+        raise
     audit(
         db,
         ctx,
@@ -936,12 +940,35 @@ def process_ingestion_job(
         return version
     if raw is None:
         raw = build_object_store(settings).get_bytes(version.object_key)
+    if len(raw) > settings.max_upload_bytes:
+        version.status = "failed"
+        version.failure_code = "SIZE_LIMIT"
+        job.status = "failed"
+        job.stage = "failed"
+        job.error_code = version.failure_code
+        job.lease_owner = None
+        job.lease_until = None
+        append_source_stage(db, ctx, version, "failed")
+        raise GroundloomError("INVALID_INPUT", "The source exceeds the configured size limit.", 422)
     extension = Path(version.object_key).suffix.lower().removeprefix(".")
     job.status = "running"
     job.stage = "scanning"
     version.status = "scanning"
     append_source_stage(db, ctx, version, "scanning")
-    text = parse_source(raw, extension)
+    try:
+        text = parse_source(raw, extension)
+    except (KeyError, OSError, ValueError, zipfile.BadZipFile, ElementTree.ParseError) as exc:
+        version.status = "failed"
+        version.failure_code = "PARSE_FAILED"
+        job.status = "failed"
+        job.stage = "failed"
+        job.error_code = version.failure_code
+        job.lease_owner = None
+        job.lease_until = None
+        append_source_stage(db, ctx, version, "failed")
+        raise GroundloomError(
+            "JOB_FAILED", "The source parser rejected this document.", 422
+        ) from exc
     if not text.strip():
         version.status = "failed"
         version.failure_code = "EMPTY_DOCUMENT"
@@ -1059,6 +1086,17 @@ def run_ingestion_worker_once(
                 failed_job.error_code = exc.code
                 failed_job.lease_owner = None
                 failed_job.lease_until = None
+                failed_version = (
+                    db.query(SourceVersion)
+                    .filter_by(
+                        id=failed_job.source_version_id,
+                        workspace_id=ctx.workspace_id,
+                    )
+                    .first()
+                )
+                if failed_version:
+                    failed_version.status = "failed"
+                    failed_version.failure_code = exc.code
                 db.commit()
             failed += 1
     return {"claimed": len(claimed), "completed": completed, "failed": failed}
@@ -1082,6 +1120,9 @@ def parse_source(raw: bytes, extension: str) -> str:
         return raw.decode("utf-8", errors="replace")
     if extension == "docx":
         with zipfile.ZipFile(__import__("io").BytesIO(raw)) as archive:
+            info = archive.getinfo("word/document.xml")
+            if info.file_size > 5_000_000 or info.compress_size == 0:
+                raise ValueError("document.xml exceeds parser safety limits")
             xml = archive.read("word/document.xml")
         root = ElementTree.fromstring(xml)
         return "\n".join(
@@ -1090,6 +1131,8 @@ def parse_source(raw: bytes, extension: str) -> str:
             if node.tag.endswith("}p") and "".join(node.itertext()).strip()
         )
     if extension == "pdf":
+        if not raw.lstrip().startswith(b"%PDF-"):
+            return ""
         try:
             from pypdf import PdfReader
 

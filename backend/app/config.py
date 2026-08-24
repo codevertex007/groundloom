@@ -1,6 +1,7 @@
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
+from urllib.parse import urlparse
 
 from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -42,6 +43,7 @@ class Settings(BaseSettings):
     agent_retry_backoff_seconds: float = 0.25
     event_retention_days: int = 90
     auth_secret: str | None = None
+    auth_mode: str = "local"
 
     @field_validator("cors_origins", mode="before")
     @classmethod
@@ -68,8 +70,21 @@ class Settings(BaseSettings):
                 raise RuntimeError("Production requires the Postgres checkpoint backend")
             if not self.auth_secret:
                 raise RuntimeError("Production requires auth encryption configuration")
+            if len(self.auth_secret) < 32:
+                raise RuntimeError("Production auth secret must be at least 32 characters")
+            if self.auth_mode != "hmac":
+                raise RuntimeError("Production requires a trusted signed identity adapter")
             if "*" in self.cors_origins:
                 raise RuntimeError("Production cannot use wildcard CORS")
+            public_url = urlparse(self.public_base_url)
+            if public_url.scheme != "https" or not public_url.netloc:
+                raise RuntimeError("Production requires an HTTPS public base URL")
+            if any("localhost" in origin or "127.0.0.1" in origin for origin in self.cors_origins):
+                raise RuntimeError("Production CORS cannot include local development origins")
+            if self.telemetry_provider == "langfuse" and not all(
+                (self.langfuse_public_key, self.langfuse_secret_key, self.langfuse_host)
+            ):
+                raise RuntimeError("Production Langfuse telemetry requires keys and host")
 
 
 @lru_cache

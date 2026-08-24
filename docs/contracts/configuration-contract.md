@@ -14,3 +14,10 @@ telemetry. Deployment settings select `checkpoint_backend=postgres`,
 Optional dependency groups are `agent`, `storage`, and `observability`.
 Provider calls use at most `agent_max_attempts` (default 3) with bounded
 exponential backoff; cancellation is checked before each retry.
+`auth_mode=local` is limited to development/test. Staging and production use
+the signed runtime-context adapter (`auth_mode=hmac`) or a deployment-provided
+OIDC/JWT implementation at the same boundary; raw identity headers are ignored
+in those environments.
+Production also requires a 32-character auth secret, HTTPS public URL,
+non-local CORS origins, and complete Langfuse credentials when Langfuse is
+selected.

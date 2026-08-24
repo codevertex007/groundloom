@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 
+from .auth import verify_context_token
 from .config import Settings, get_settings
 from .context import RuntimeContext, resolve_context
 from .db import build_session_factory, init_database
@@ -77,8 +78,9 @@ from .telemetry import build_telemetry
 
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
-    init_database(settings.database_url)
-    session_factory = build_session_factory(settings.database_url)
+    settings.validate_runtime()
+    db_engine = init_database(settings.database_url)
+    session_factory = build_session_factory(settings.database_url, db_engine)
     with session_factory() as db:
         seed_local(db, settings)
     app = FastAPI(
@@ -88,6 +90,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     )
     app.state.settings = settings
     app.state.session_factory = session_factory
+    app.state.db_engine = db_engine
     app.state.telemetry = build_telemetry(
         settings.telemetry_provider,
         settings.langfuse_public_key,
@@ -157,6 +160,10 @@ def get_ctx(
     x_correlation_id: str | None = Header(default=None),
 ) -> RuntimeContext:
     settings: Settings = request.app.state.settings
+    if settings.env in {"staging", "production"} or settings.auth_mode == "hmac":
+        x_user_id, x_workspace_id = verify_context_token(
+            request.headers.get("Authorization"), settings.auth_secret
+        )
     return resolve_context(db, settings, x_user_id, x_workspace_id, x_correlation_id)
 
 

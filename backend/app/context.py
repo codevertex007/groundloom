@@ -1,8 +1,9 @@
 from dataclasses import dataclass, field
 
-from fastapi import Header
+from fastapi import Header, Request
 from sqlalchemy.orm import Session
 
+from .auth import verify_context_token
 from .config import Settings
 from .errors import GroundloomError
 from .models import Membership
@@ -39,10 +40,15 @@ def resolve_context(
 
 
 def context_dependency(
+    request: Request,
     db: Session,
     settings: Settings,
     x_user_id: str | None = Header(default=None),
     x_workspace_id: str | None = Header(default=None),
     x_correlation_id: str | None = Header(default=None),
 ) -> RuntimeContext:
+    if settings.env in {"staging", "production"} or settings.auth_mode == "hmac":
+        x_user_id, x_workspace_id = verify_context_token(
+            request.headers.get("Authorization"), settings.auth_secret
+        )
     return resolve_context(db, settings, x_user_id, x_workspace_id, x_correlation_id)

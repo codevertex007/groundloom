@@ -19,9 +19,11 @@ This is the initial planned matrix. Codex must replace planned identifiers with 
 | `NFR-REL-001..004` | `backend/tests/test_adapters_and_jobs.py::test_ingestion_worker_reclaims_and_replays_a_queued_job`; `backend/tests/test_api_vertical_slice.py` replay/idempotency tests; backup/restore and live failure injection remain release evidence |
 | `NFR-PERF-001..004` | API/retrieval/agent-activity load scenarios |
 | `SEC-AUTH-001..006` | `backend/tests/test_api_vertical_slice.py::test_cross_workspace_is_denied`; `backend/tests/test_adapters_and_jobs.py::test_local_object_store_rejects_escape_and_round_trips`; scoped tool/memory tests |
+| `SEC-IDENTITY-*` | `backend/tests/test_security_boundaries.py::test_signed_identity_controls_workspace_context`; `backend/app/auth.py` signed context verifier |
 | `ARCH-STATE-001..004` | architecture/static tests plus recovery/proposal tests |
 | `TOOL-*` | per-tool schema/auth/replay/bounds/trace tests |
 | `API-*`, `EVT-*` | OpenAPI/SSE schema, compatibility, replay tests, and `test_project_source_grounded_run_and_replay` stream assertion |
 | `EVAL-*` | `backend/tests/test_evaluation.py::test_deterministic_rubric_requires_terms_and_citations`; `backend/scripts/run_evals.py` JSON baseline |
+| `PERF-LOCAL-*` | `backend/scripts/benchmark_local.py --requests 20`; synthetic SQLite/filesystem retrieval p50/p95 report |
 
 Release blocks on any active requirement without proof or explicitly approved manual verification.
