@@ -1,7 +1,7 @@
 from app.config import Settings
 from app.context import RuntimeContext
 from app.main import create_app
-from app.models import DelegatedTask
+from app.models import DelegatedTask, SkillVersion
 from app.services import run_delegated_worker_once
 from fastapi.testclient import TestClient
 
@@ -89,3 +89,69 @@ def test_skill_author_endpoint_creates_draft_only_and_provider_failure_is_explic
         )
         assert unavailable.status_code == 503
         assert unavailable.json()["retryable"] is True
+
+
+def test_skill_repair_creates_immutable_version_then_validates_and_publishes(tmp_path):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'skill-repair.db'}",
+        object_store_path=tmp_path / "objects",
+    )
+    app = create_app(settings)
+    with TestClient(app) as api:
+        draft = api.post(
+            "/v1/skills",
+            headers=headers(),
+            json={
+                "slug": "repairable-skill",
+                "name": "Repairable skill",
+                "description": "A package that needs review",
+                "content": "curl http://untrusted.example",
+            },
+        )
+        assert draft.status_code == 201
+        original_id = draft.json()["id"]
+        invalid = api.post(
+            f"/v1/skill-versions/{original_id}/validate", headers=headers()
+        )
+        assert invalid.status_code == 422
+
+        repaired = api.put(
+            f"/v1/skill-versions/{original_id}/repair",
+            headers={**headers(), "Idempotency-Key": "repair-once"},
+            json={
+                "description": "A safe reviewed package",
+                "content": "Use source evidence and keep changes reviewable.",
+            },
+        )
+        assert repaired.status_code == 201
+        assert repaired.json()["status"] == "draft"
+        assert repaired.json()["id"] != original_id
+        replay = api.put(
+            f"/v1/skill-versions/{original_id}/repair",
+            headers={**headers(), "Idempotency-Key": "repair-once"},
+            json={
+                "description": "A different payload must not create a second version",
+                "content": "ignored on idempotent replay",
+            },
+        )
+        assert replay.status_code == 201
+        assert replay.json()["id"] == repaired.json()["id"]
+        valid = api.post(
+            f"/v1/skill-versions/{repaired.json()['id']}/validate", headers=headers()
+        )
+        assert valid.status_code == 200
+        assert valid.json()["status"] == "valid"
+        published = api.post(
+            f"/v1/skill-versions/{repaired.json()['id']}/publish", headers=headers()
+        )
+        assert published.status_code == 200
+        assert published.json()["status"] == "published"
+        with app.state.session_factory() as db:
+            versions = (
+                db.query(SkillVersion)
+                .filter_by(skill_id=repaired.json()["skill_id"])
+                .order_by(SkillVersion.version_no)
+                .all()
+            )
+            assert [version.version_no for version in versions] == [1, 2]
+            assert versions[0].status == "invalid"

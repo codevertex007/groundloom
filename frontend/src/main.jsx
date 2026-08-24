@@ -45,6 +45,15 @@ const fmt = (date) =>
     : "—";
 const iconFor = (type) =>
   type === "pdf" ? "PDF" : type === "docx" ? "DOC" : "TXT";
+const classifyError = (error) => {
+  if (error?.code === "PERMISSION_DENIED" || error?.code === "UNAUTHENTICATED") {
+    return "permission";
+  }
+  if (error?.retryable || error?.code === "DEPENDENCY_UNAVAILABLE") {
+    return "retryable";
+  }
+  return "terminal";
+};
 
 function App() {
   const [screen, setScreen] = useState("projects");
@@ -74,7 +83,7 @@ function App() {
       setSources(s);
       setSkills(k);
     } catch (e) {
-      setError(e.message);
+      setError({ message: e.message, code: e.code, retryable: e.retryable });
     } finally {
       setLoading(false);
     }
@@ -102,7 +111,7 @@ function App() {
       setActiveProject(await api(`/v1/projects/${project.id}`));
       setScreen("canvas");
     } catch (e) {
-      setError(e.message);
+      setError({ message: e.message, code: e.code, retryable: e.retryable });
     }
   };
   const nav = (target) => {
@@ -123,11 +132,25 @@ function App() {
       />
       <main className="main-shell">
         {error && (
-          <div className="error-banner" role="alert">
-            <CircleHelp size={15} /> {error}
-            <button onClick={refresh}>
-              <RefreshCw size={14} /> Retry
-            </button>
+          <div className="error-banner" data-error-kind={classifyError(error)} role="alert">
+            <CircleHelp size={15} />
+            <span>
+              <strong>
+                {classifyError(error) === "permission"
+                  ? "Permission denied"
+                  : classifyError(error) === "retryable"
+                    ? "Temporary service issue"
+                    : "Request failed"}
+              </strong>{" "}
+              {error.message}
+            </span>
+            {classifyError(error) === "retryable" ? (
+              <button onClick={refresh}>
+                <RefreshCw size={14} /> Retry
+              </button>
+            ) : (
+              <button onClick={() => setError("")}>Dismiss</button>
+            )}
           </div>
         )}
         {screen === "projects" && (
@@ -448,16 +471,100 @@ function SkillsScreen({ skills, onRefresh }) {
     description: "",
     content: "",
   });
+  const [authorForm, setAuthorForm] = useState({
+    objective: "",
+    suggested_slug: "",
+    suggested_name: "",
+    scope: "workspace",
+  });
+  const [repair, setRepair] = useState(null);
+  const [repairForm, setRepairForm] = useState({ description: "", content: "" });
   const [creating, setCreating] = useState(false);
+  const [authoring, setAuthoring] = useState(false);
+  const [busyAction, setBusyAction] = useState("");
+  const [message, setMessage] = useState("");
   const toggle = (id) => setOpen((current) => (current === id ? null : id));
   const create = async () => {
+    setBusyAction("create");
+    setMessage("");
     try {
       await api("/v1/skills", { method: "POST", body: JSON.stringify(form) });
       setCreating(false);
       setForm({ slug: "", name: "", description: "", content: "" });
       onRefresh();
     } catch (e) {
-      alert(e.message);
+      setMessage(e.message);
+    } finally {
+      setBusyAction("");
+    }
+  };
+  const author = async () => {
+    setBusyAction("author");
+    setMessage("");
+    try {
+      await api("/v1/skills/ai-drafts", {
+        method: "POST",
+        body: JSON.stringify({
+          ...authorForm,
+          suggested_slug: authorForm.suggested_slug || null,
+          suggested_name: authorForm.suggested_name || null,
+        }),
+      });
+      setAuthoring(false);
+      setAuthorForm({ objective: "", suggested_slug: "", suggested_name: "", scope: "workspace" });
+      onRefresh();
+    } catch (e) {
+      setMessage(e.message);
+    } finally {
+      setBusyAction("");
+    }
+  };
+  const validate = async (version) => {
+    setBusyAction(`validate:${version.id}`);
+    setMessage("");
+    try {
+      await api(`/v1/skill-versions/${version.id}/validate`, { method: "POST" });
+      onRefresh();
+    } catch (e) {
+      setMessage(e.message);
+      onRefresh();
+    } finally {
+      setBusyAction("");
+    }
+  };
+  const publish = async (version) => {
+    setBusyAction(`publish:${version.id}`);
+    setMessage("");
+    try {
+      await api(`/v1/skill-versions/${version.id}/publish`, { method: "POST" });
+      onRefresh();
+    } catch (e) {
+      setMessage(e.message);
+    } finally {
+      setBusyAction("");
+    }
+  };
+  const openRepair = (skill, version) => {
+    setRepair({ skill, version });
+    setRepairForm({ description: version.description || skill.description, content: "" });
+    setMessage("");
+  };
+  const submitRepair = async () => {
+    if (!repair) return;
+    setBusyAction("repair");
+    setMessage("");
+    try {
+      await api(`/v1/skill-versions/${repair.version.id}/repair`, {
+        method: "PUT",
+        headers: { "Idempotency-Key": `ui-repair-${repair.version.id}-${crypto.randomUUID()}` },
+        body: JSON.stringify(repairForm),
+      });
+      setRepair(null);
+      onRefresh();
+    } catch (e) {
+      setMessage(e.message);
+    } finally {
+      setBusyAction("");
     }
   };
   return (
@@ -467,12 +574,14 @@ function SkillsScreen({ skills, onRefresh }) {
         title="Skills"
         meta={`${skills.length} packages`}
         action={
-          <button
-            className="primary-button"
-            onClick={() => setCreating(!creating)}
-          >
-            <Plus size={15} /> New skill
-          </button>
+          <div className="header-actions">
+            <button className="soft-button" onClick={() => setAuthoring(!authoring)}>
+              <Sparkles size={15} /> AI author draft
+            </button>
+            <button className="primary-button" onClick={() => setCreating(!creating)}>
+              <Plus size={15} /> New skill
+            </button>
+          </div>
         }
       />
       <p className="lede">
@@ -480,6 +589,51 @@ function SkillsScreen({ skills, onRefresh }) {
         drafting task calls for them. Published bytes stay immutable and runs
         pin exact versions.
       </p>
+      {message && (
+        <div className="error-banner" role="alert">
+          <CircleHelp size={15} /> {message}
+          <button onClick={() => setMessage("")}>Dismiss</button>
+        </div>
+      )}
+      {authoring && (
+        <div className="inline-form" aria-label="AI skill author">
+          <div className="eyebrow">AI SKILL AUTHOR / DRAFT ONLY</div>
+          <textarea
+            aria-label="Skill author objective"
+            placeholder="Describe the reusable guidance this skill should provide…"
+            value={authorForm.objective}
+            onChange={(e) => setAuthorForm({ ...authorForm, objective: e.target.value })}
+          />
+          <div className="form-grid">
+            <input
+              aria-label="Suggested skill slug"
+              placeholder="optional-slug"
+              value={authorForm.suggested_slug}
+              onChange={(e) => setAuthorForm({ ...authorForm, suggested_slug: e.target.value })}
+            />
+            <input
+              aria-label="Suggested skill name"
+              placeholder="Optional display name"
+              value={authorForm.suggested_name}
+              onChange={(e) => setAuthorForm({ ...authorForm, suggested_name: e.target.value })}
+            />
+            <select
+              aria-label="AI skill scope"
+              value={authorForm.scope}
+              onChange={(e) => setAuthorForm({ ...authorForm, scope: e.target.value })}
+            >
+              <option value="workspace">Workspace</option>
+              <option value="organization">Organization</option>
+            </select>
+          </div>
+          <div className="form-actions">
+            <button className="soft-button" onClick={() => setAuthoring(false)}>Cancel</button>
+            <button className="primary-button" disabled={!authorForm.objective.trim() || busyAction === "author"} onClick={author}>
+              {busyAction === "author" ? "Drafting…" : "Create AI draft"}
+            </button>
+          </div>
+        </div>
+      )}
       {creating && (
         <div className="inline-form">
           <div className="form-grid">
@@ -512,8 +666,8 @@ function SkillsScreen({ skills, onRefresh }) {
             <button className="soft-button" onClick={() => setCreating(false)}>
               Cancel
             </button>
-            <button className="primary-button" onClick={create}>
-              Create draft
+            <button className="primary-button" disabled={busyAction === "create"} onClick={create}>
+              {busyAction === "create" ? "Creating…" : "Create draft"}
             </button>
           </div>
         </div>
@@ -565,6 +719,43 @@ function SkillsScreen({ skills, onRefresh }) {
                       {v.status}
                     </span>
                     <span>{v.description}</span>
+                    <div className="version-actions">
+                      {(v.status === "draft" || v.status === "invalid") && (
+                        <button
+                          className="soft-button compact"
+                          disabled={busyAction === `validate:${v.id}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            validate(v);
+                          }}
+                        >
+                          {busyAction === `validate:${v.id}` ? "Checking…" : "Validate"}
+                        </button>
+                      )}
+                      {v.status !== "published" && (
+                        <button
+                          className="soft-button compact"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            openRepair(skill, v);
+                          }}
+                        >
+                          Repair draft
+                        </button>
+                      )}
+                      {v.status === "valid" && (
+                        <button
+                          className="primary-button compact"
+                          disabled={busyAction === `publish:${v.id}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            publish(v);
+                          }}
+                        >
+                          {busyAction === `publish:${v.id}` ? "Publishing…" : "Publish"}
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))}
               </div>
@@ -572,6 +763,45 @@ function SkillsScreen({ skills, onRefresh }) {
           </div>
         ))}
       </div>
+      {repair && (
+        <div className="modal-backdrop">
+          <div className="modal wide" role="dialog" aria-modal="true" aria-labelledby="repair-skill-title">
+            <div className="modal-head">
+              <div>
+                <span className="eyebrow">REPAIR / NEW IMMUTABLE VERSION</span>
+                <h2 id="repair-skill-title">Repair {repair.skill.name}</h2>
+              </div>
+              <button className="icon-button" aria-label="Close skill repair dialog" onClick={() => setRepair(null)}>
+                <X size={17} />
+              </button>
+            </div>
+            <p className="muted">Version {repair.version.version_no} remains unchanged. Your repair creates the next draft version.</p>
+            <label>
+              Description
+              <input
+                aria-label="Repaired skill description"
+                value={repairForm.description}
+                onChange={(e) => setRepairForm({ ...repairForm, description: e.target.value })}
+              />
+            </label>
+            <label>
+              SKILL.md content
+              <textarea
+                aria-label="Repaired skill instructions"
+                value={repairForm.content}
+                onChange={(e) => setRepairForm({ ...repairForm, content: e.target.value })}
+                placeholder="Write safe, scoped instructions…"
+              />
+            </label>
+            <div className="modal-actions">
+              <button className="soft-button" onClick={() => setRepair(null)}>Cancel</button>
+              <button className="primary-button" disabled={!repairForm.description.trim() || !repairForm.content.trim() || busyAction === "repair"} onClick={submitRepair}>
+                {busyAction === "repair" ? "Saving…" : "Create repaired draft"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </section>
   );
 }
@@ -602,8 +832,8 @@ function Canvas({ project, sources, onBack, onRefresh }) {
       setApprovals([]);
     }
   };
-  const load = async () => {
-    const runId = run?.id || project.current_run_id;
+  const load = async (runIdOverride = null) => {
+    const runId = runIdOverride || run?.id || project.current_run_id;
     const [o, c, p, ev, currentRun] = await Promise.all([
       api(`/v1/projects/${project.id}/outline`),
       api(`/v1/projects/${project.id}/content`),
@@ -654,7 +884,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
       });
       setRun(nextRun);
       setMessage("");
-      await load();
+      await load(nextRun.id);
       await loadApprovals(nextRun.id);
       onRefresh();
     } catch (e) {

@@ -27,6 +27,10 @@ test("reference surfaces and connected mutations are present in the UI", () => {
     "/v1/projects",
     "/v1/sources",
     "/v1/skills",
+    "/v1/skills/ai-drafts",
+    "/v1/skill-versions/",
+    "Repair draft",
+    "Create repaired draft",
     "/v1/workspace/preferences",
     "/v1/approvals/",
     "/v1/patches/",
@@ -42,6 +46,9 @@ test("reference surfaces and connected mutations are present in the UI", () => {
 test("interactive reference states expose keyboard and assistive semantics", () => {
   assert.match(source, /role="dialog"\s+aria-modal="true"/);
   assert.match(source, /role="alert"/);
+  assert.match(source, /data-error-kind=\{classifyError\(error\)\}/);
+  assert.match(source, /Permission denied/);
+  assert.match(source, /Temporary service issue/);
   assert.match(source, /role="status"/);
   assert.match(source, /aria-label="Send message"/);
   assert.match(source, /aria-expanded=\{open === skill\.id\}/);

@@ -165,6 +165,31 @@ def test_local_agent_writes_bounded_run_checkpoint(tmp_path):
     assert "request_text" not in checkpoint
 
 
+def test_concurrent_checkpoint_writers_leave_complete_json(tmp_path):
+    from concurrent.futures import ThreadPoolExecutor
+
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'checkpoint-concurrency.db'}",
+        object_store_path=tmp_path / "objects",
+    )
+    with ThreadPoolExecutor(max_workers=8) as pool:
+        list(
+            pool.map(
+                lambda index: save_checkpoint(
+                    settings,
+                    "workspace-a",
+                    "project-a",
+                    "thread-a",
+                    {"writer": index, "status": "completed"},
+                ),
+                range(32),
+            )
+        )
+    checkpoint = load_checkpoint(settings, "workspace-a", "project-a", "thread-a")
+    assert checkpoint is not None
+    assert checkpoint["status"] == "completed"
+
+
 def test_outbox_delivery_marks_only_successful_messages(tmp_path):
     settings = Settings(database_url=f"sqlite:///{tmp_path / 'outbox.db'}")
     init_database(settings.database_url)

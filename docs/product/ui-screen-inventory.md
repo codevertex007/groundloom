@@ -37,7 +37,7 @@ The archive contains one Design Canvas export, `Knowledge Platform.dc.html`, wit
 |---|---|---|
 | `/projects` | Warm neutral workspace shell, collapsible left navigation, search/filter toolbar, cards with source/section counts and progress, empty state, New Project action | `ProjectsScreen`, real `GET /v1/projects`, loading/empty/error states |
 | `/sources` | Searchable source library, file-type badges, source rows and processing/version status | `SourcesScreen`, upload/finalize against `POST /v1/sources/uploads`, immutable version list |
-| `/skills` | Starter/organization/workspace skill cards, package descriptions, version detail, create menu, AI-author affordance | `SkillsScreen`, draft/validate/publish API path, scoped package metadata |
+| `/skills` | Starter/organization/workspace skill cards, package descriptions, version detail, create menu, AI-author affordance, validation/repair/publication controls | `SkillsScreen`, AI-draft/validate/repair/publish API path, immutable version history, scoped package metadata |
 | `/projects/new` | Project type, brief, source selection, validation before create | `NewProjectModal`, real project command and selected ready source versions |
 | `/projects/:id/canvas` | Three-column canvas: source/search rail, outline/content tabs, persistent Copilot panel, activity/todos, citation and proposal review | `Canvas`, durable event replay, typed content/outline DTOs, citation panel, accept/reject diff |
 | Canvas overlays | Citation context, proposed diff, accept/reject, loading and unavailable states | `CitationPanel`, `DiffCard`, deterministic patch endpoints |

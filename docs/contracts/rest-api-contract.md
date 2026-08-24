@@ -14,7 +14,8 @@ POST     /sources/uploads                 GET /sources/{id}
 GET      /source-versions/{id}/passages/{passage_id}
 POST     /skills                          POST /skills/ai-drafts
 POST     /delegated-tasks/{id}/retry      POST /runs/{id}/delegated-tasks/reconcile
-POST     /skill-versions/{id}/validate    POST /skill-versions/{id}/publish
+POST     /skill-versions/{id}/validate    PUT  /skill-versions/{id}/repair
+POST     /skill-versions/{id}/publish
 POST     /patches/{id}/accept             POST /patches/{id}/reject
 POST     /exports                         GET /exports/{id}
 POST     /source-versions/{id}/index-rebuilds  GET /index-rebuilds/{job_id}
@@ -44,3 +45,8 @@ Workspace preferences are typed, versioned, audited, and idempotent. Project
 configuration pins the effective workspace defaults; explicit project defaults
 override them within policy bounds. The UI reads and writes these preferences
 through the API rather than maintaining client-only settings.
+
+Skill repair never edits an existing version. `PUT
+/skill-versions/{id}/repair` validates the caller's workspace scope, creates the
+next draft version for the same skill, records `repaired_from_version_id`, and
+accepts `Idempotency-Key`. Published bytes cannot be repaired in place.

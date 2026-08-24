@@ -69,6 +69,7 @@ from .schemas import (
     RetentionPolicyUpdate,
     SkillAuthorDraftCreate,
     SkillCreate,
+    SkillDraftRepair,
     UploadFinalize,
     WorkspacePreferencesUpdate,
 )
@@ -2346,6 +2347,59 @@ def author_skill_draft(
     audit(db, ctx, "skill.ai_draft.created", "skill_version", version.id, "Created draft-only skill author output")
     db.commit()
     return version
+
+
+def repair_skill_draft(
+    db: Session, ctx: RuntimeContext, version_id: str, body: SkillDraftRepair
+) -> SkillVersion:
+    """Create a new immutable draft version while preserving the failed version."""
+    ctx.require("repair skill drafts", {"author", "reviewer", "workspace_admin", "organization_admin"})
+    previous = (
+        db.query(SkillVersion)
+        .filter_by(id=version_id, workspace_id=ctx.workspace_id)
+        .first()
+    )
+    if previous is None:
+        raise GroundloomError("RESOURCE_NOT_FOUND", "The skill version was not found.", 404)
+    if previous.status == "published":
+        raise GroundloomError(
+            "INVALID_STATE", "Published skill bytes are immutable; repair a draft version instead.", 409
+        )
+    skill = db.query(Skill).filter_by(id=previous.skill_id, workspace_id=ctx.workspace_id).first()
+    if skill is None:
+        raise GroundloomError("RESOURCE_NOT_FOUND", "The skill was not found.", 404)
+    if re.search(r"(api[_ -]?key|password|secret|token)\s*[:=]", body.content, re.I):
+        raise GroundloomError("INVALID_INPUT", "Skill content appears to contain a secret.", 422)
+    raw = f"name: {skill.name}\ndescription: {body.description}\n\n{body.content}".encode()
+    next_version = (
+        db.query(func.max(SkillVersion.version_no)).filter_by(skill_id=skill.id).scalar() or 0
+    ) + 1
+    repaired = SkillVersion(
+        id=new_id("skv"),
+        workspace_id=ctx.workspace_id,
+        skill_id=skill.id,
+        version_no=next_version,
+        status="draft",
+        description=body.description,
+        package_json={
+            "content": body.content,
+            "frontmatter": {"name": skill.name, "description": body.description},
+            "repaired_from_version_id": previous.id,
+        },
+        content_hash=hashlib.sha256(raw).hexdigest(),
+        actor_id=ctx.user_id,
+    )
+    db.add(repaired)
+    audit(
+        db,
+        ctx,
+        "skill.draft.repaired",
+        "skill_version",
+        repaired.id,
+        "Created a repaired unpublished skill draft",
+    )
+    db.commit()
+    return repaired
 
 
 def validate_skill(db: Session, ctx: RuntimeContext, version_id: str) -> SkillVersion:

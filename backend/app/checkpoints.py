@@ -6,16 +6,21 @@ can replace this seam with the pinned LangGraph Postgres checkpointer.
 """
 
 import json
+import os
 import re
+import time
 from collections.abc import Iterator
 from contextlib import contextmanager
 from pathlib import Path
+from threading import Lock
 from typing import Any
+from uuid import uuid4
 
 from .config import Settings
 from .errors import GroundloomError
 
 _SAFE_PART = re.compile(r"^[A-Za-z0-9._-]+$")
+_CHECKPOINT_WRITE_LOCK = Lock()
 
 
 def _safe_part(value: str, label: str) -> str:
@@ -40,9 +45,30 @@ def save_checkpoint(
 ) -> None:
     target = checkpoint_path(settings, workspace_id, project_id, thread_id)
     target.parent.mkdir(parents=True, exist_ok=True)
-    temporary = target.with_suffix(".tmp")
-    temporary.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
-    temporary.replace(target)
+    # A thread may be resumed while a retry or worker is still flushing the
+    # previous state. Unique sibling temp files prevent writers from clobbering
+    # one another, while os.replace keeps readers on complete JSON snapshots.
+    temporary = target.with_name(f".{target.name}.{uuid4().hex}.tmp")
+    try:
+        with _CHECKPOINT_WRITE_LOCK:
+            temporary.write_text(json.dumps(state, sort_keys=True), encoding="utf-8")
+            last_error: PermissionError | None = None
+            for attempt in range(5):
+                try:
+                    os.replace(temporary, target)
+                    last_error = None
+                    break
+                except PermissionError as exc:
+                    last_error = exc
+                    if attempt == 4:
+                        raise
+                    # Windows can briefly retain a completed reader handle;
+                    # keep the retry bounded and preserve atomic replacement.
+                    time.sleep(0.02 * (attempt + 1))
+            if last_error is not None:
+                raise last_error
+    finally:
+        temporary.unlink(missing_ok=True)
 
 
 def load_checkpoint(

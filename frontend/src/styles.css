@@ -171,6 +171,12 @@ button {
   margin: 0;
   letter-spacing: -0.04em;
 }
+.header-actions {
+  display: flex;
+  gap: 7px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 .header-meta {
   font:
     500 10px ui-monospace,
@@ -237,6 +243,12 @@ button {
 }
 .soft-button:hover {
   background: var(--panel-2);
+}
+.primary-button.compact,
+.soft-button.compact {
+  height: 27px;
+  padding: 0 8px;
+  font-size: 9px;
 }
 .icon-button {
   width: 30px;
@@ -511,10 +523,16 @@ button {
 }
 .version-row {
   display: grid;
-  grid-template-columns: 35px 80px 1fr;
+  grid-template-columns: 35px 80px minmax(120px, 1fr) auto;
   gap: 8px;
   align-items: center;
   margin-top: 9px;
+}
+.version-actions {
+  display: flex;
+  gap: 5px;
+  justify-content: flex-end;
+  flex-wrap: wrap;
 }
 .inline-form {
   max-width: 850px;

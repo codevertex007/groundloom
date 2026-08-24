@@ -1,6 +1,24 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test } from "@playwright/test";
 
+test("matches stable projects and sources empty-state baselines", async ({ page }) => {
+  test.skip(process.platform !== "win32", "Committed visual baselines use the pinned Windows Chromium lane");
+  await page.goto("/");
+  await expect(page.getByRole("heading", { name: "Projects" })).toBeVisible();
+  await page.evaluate(() => document.fonts?.ready);
+  await expect(page.locator(".app-shell")).toHaveScreenshot("projects-empty.png", {
+    animations: "disabled",
+    caret: "hide",
+  });
+
+  await page.getByRole("button", { name: "Sources", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Sources", exact: true })).toBeVisible();
+  await expect(page.locator(".app-shell")).toHaveScreenshot("sources-empty.png", {
+    animations: "disabled",
+    caret: "hide",
+  });
+});
+
 test("creates a project, runs the persistent collaborator, reviews, and accepts a proposal", async ({
   page,
 }) => {
@@ -106,6 +124,102 @@ test("persists settings and exposes the command palette navigation", async ({
   await expect(
     page.getByRole("heading", { name: "Sources", exact: true }),
   ).toBeVisible();
+});
+
+test("pauses for plan approval and resumes the same collaborator thread", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const settings = page.getByRole("dialog", { name: "Settings" });
+  await expect(settings).toBeVisible();
+  const approvalToggle = settings.getByLabel("Require plan approval");
+  if (!(await approvalToggle.isChecked())) await approvalToggle.check();
+  await settings.getByRole("button", { name: "Save settings", exact: true }).click();
+
+  await page.locator(".page-header").getByRole("button", { name: "New Project", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Start a grounded workspace" });
+  await dialog.getByLabel("Project name").fill(`Approval project ${Date.now()}`);
+  await dialog.getByLabel("Project brief").fill("Create a plan that requires explicit review.");
+  await dialog.getByRole("button", { name: "Create project", exact: true }).click();
+  await page.getByRole("textbox", { name: "Ask Copilot, or describe a change…" }).fill("Draft a plan for review.");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(page.getByText("Plan approval required", { exact: true })).toBeVisible({ timeout: 15_000 });
+  await expect(page.getByText("Run waiting_for_approval", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Approve plan", exact: true }).click();
+  await expect(page.getByText("PROPOSED CHANGE", { exact: true })).toBeVisible({ timeout: 15_000 });
+
+  await page.getByRole("button", { name: "Settings", exact: true }).click();
+  const cleanup = page.getByRole("dialog", { name: "Settings" });
+  await cleanup.getByLabel("Require plan approval").uncheck();
+  await cleanup.getByRole("button", { name: "Save settings", exact: true }).click();
+});
+
+test("creates, validates, repairs, and publishes an AI-authored skill draft", async ({ page }) => {
+  await page.goto("/");
+  await page.getByRole("button", { name: "Skills", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Skills", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "AI author draft", exact: true }).click();
+  await page.getByLabel("Skill author objective").fill("Create scoped editorial guidance for grounded drafts.");
+  const slug = `browser-skill-${Date.now()}`;
+  await page.getByLabel("Suggested skill slug").fill(slug);
+  await page.getByLabel("Suggested skill name").fill("Browser editorial skill");
+  await page.getByRole("button", { name: "Create AI draft", exact: true }).click();
+
+  const card = page.locator(".skill-card").filter({ hasText: "Browser editorial skill" });
+  await expect(card).toBeVisible();
+  await card.click();
+  await expect(card.getByText("draft", { exact: true })).toBeVisible();
+  await card.getByRole("button", { name: "Validate", exact: true }).click();
+  await expect(card.getByText("valid", { exact: true })).toBeVisible();
+  await card.getByRole("button", { name: "Publish", exact: true }).click();
+  await expect(card.getByText("published", { exact: true })).toBeVisible();
+});
+
+test("shows reconnect state after a dropped activity stream", async ({ page }) => {
+  let dropped = false;
+  await page.route("**/*", async (route) => {
+    if (!route.request().url().includes("/events/stream")) {
+      await route.continue();
+      return;
+    }
+    if (!dropped) {
+      dropped = true;
+      await route.abort("connectionreset");
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto("/");
+  await page.locator(".page-header").getByRole("button", { name: "New Project", exact: true }).click();
+  const dialog = page.getByRole("dialog", { name: "Start a grounded workspace" });
+  await dialog.getByLabel("Project name").fill(`Reconnect project ${Date.now()}`);
+  await dialog.getByLabel("Project brief").fill("Reconnect the durable activity stream.");
+  await dialog.getByRole("button", { name: "Create project", exact: true }).click();
+  await expect.poll(() => dropped, { timeout: 10_000 }).toBe(true);
+  await expect(page.locator('[aria-label="Activity stream reconnecting"]')).toBeVisible({ timeout: 10_000 });
+  await expect(page.locator('[aria-label="Activity stream connected"]')).toBeVisible({ timeout: 15_000 });
+});
+
+test("renders a distinct permission-denied state", async ({ page }) => {
+  await page.route("**/v1/projects", async (route) => {
+    if (route.request().method() === "GET") {
+      await route.fulfill({
+        status: 403,
+        contentType: "application/json",
+        body: JSON.stringify({
+          code: "PERMISSION_DENIED",
+          message: "This workspace is not available to the current identity.",
+          retryable: false,
+        }),
+      });
+      return;
+    }
+    await route.continue();
+  });
+  await page.goto("/");
+  const alert = page.getByRole("alert");
+  await expect(alert).toHaveAttribute("data-error-kind", "permission");
+  await expect(alert).toContainText("Permission denied");
+  await expect(alert.getByRole("button", { name: "Dismiss" })).toBeVisible();
 });
 
 test("projects surface has no serious or critical accessibility violations", async ({

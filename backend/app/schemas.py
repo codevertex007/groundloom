@@ -167,6 +167,12 @@ class SkillAuthorDraftCreate(BaseModel):
     scope: Literal["workspace", "organization"] = "workspace"
 
 
+class SkillDraftRepair(BaseModel):
+    description: str = Field(min_length=1, max_length=5000)
+    content: str = Field(min_length=1, max_length=100_000)
+    idempotency_key: str | None = Field(default=None, max_length=180)
+
+
 class SkillVersionOut(ProductModel):
     id: str
     skill_id: str

@@ -4,6 +4,6 @@ Failure classes: transient provider/rate limit, schema-invalid model output, emp
 
 Each class has explicit retryability, backoff, maximum attempts, user message, telemetry severity, and resume behavior. Authorization/policy denial and invalid irreversible operations are never retried as transient errors.
 
-Cancellation is durable and checked before tool calls, between model turns, and by workers/subagents. Partial proposals remain non-canonical. Worker leases expire safely. Checkpoint resume repairs incomplete tool-call histories and reuses idempotent durable effects.
+Cancellation is durable and checked before tool calls, between model turns, and by workers/subagents. Partial proposals remain non-canonical. Worker leases expire safely. Checkpoint resume repairs incomplete tool-call histories and reuses idempotent durable effects. The local file checkpoint adapter writes unique sibling temp files under a bounded lock before atomic replacement, with a short bounded retry for transient Windows reader handles, so concurrent retries cannot expose partial JSON or collide on Windows.
 
 Recovery priorities: prevent unauthorized/duplicate effects; preserve canonical data; produce an intelligible run state; allow targeted resume/retry; clean non-canonical artifacts later. Test process death at every durable boundary.

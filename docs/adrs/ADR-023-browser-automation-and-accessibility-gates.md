@@ -18,8 +18,10 @@ Use pinned `@playwright/test` for local and CI browser E2E, with an isolated
 SQLite/filesystem backend started by `frontend/playwright.config.js`. Use the
 pinned `@axe-core/playwright` integration for serious/critical rendered
 accessibility violations. Keep visual screenshot baselines as a separate,
-reviewed release artifact; do not commit machine-specific snapshots as product
-truth.
+reviewed release artifact. The repository includes approved Windows Chromium
+baselines for the pinned desktop lane; other platforms run semantic and
+accessibility E2E and skip the machine-specific pixel comparison. Baselines
+are never product truth.
 
 ## Consequences
 
@@ -35,5 +37,7 @@ production bundle. Their versions are pinned through `frontend/package-lock.json
 ## Validation
 
 `frontend/e2e/groundloom.spec.js` covers the create → collaborator → proposal →
-accept journey, settings persistence, command-palette navigation, and an axe
-serious/critical scan. CI installs Chromium and runs `npm run test:e2e`.
+accept journey, settings persistence, command-palette navigation, plan
+approval/resume, AI skill draft repair/publication, dropped-stream reconnect,
+source/citation navigation, visual baselines on the pinned Windows lane, and an
+axe serious/critical scan. CI installs Chromium and runs `npm run test:e2e`.
