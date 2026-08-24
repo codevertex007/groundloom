@@ -88,14 +88,32 @@ class S3ObjectStore:
             response = self.client.get_object(Bucket=self.bucket, Key=_validate_key(key))
             return response["Body"].read()
         except Exception as exc:
-            raise GroundloomError("RESOURCE_NOT_FOUND", "The artifact was not found.", 404) from exc
+            response = getattr(exc, "response", {}) or {}
+            code = response.get("Error", {}).get("Code")
+            if code in {"NoSuchKey", "404", "NotFound"}:
+                raise GroundloomError("RESOURCE_NOT_FOUND", "The artifact was not found.", 404) from exc
+            raise GroundloomError(
+                "DEPENDENCY_UNAVAILABLE",
+                "Object storage is temporarily unavailable.",
+                503,
+                retryable=True,
+            ) from exc
 
     def exists(self, key: str) -> bool:
         try:
             self.client.head_object(Bucket=self.bucket, Key=_validate_key(key))
             return True
-        except Exception:
-            return False
+        except Exception as exc:
+            response = getattr(exc, "response", {}) or {}
+            code = response.get("Error", {}).get("Code")
+            if code in {"NoSuchKey", "404", "NotFound"}:
+                return False
+            raise GroundloomError(
+                "DEPENDENCY_UNAVAILABLE",
+                "Object storage is temporarily unavailable.",
+                503,
+                retryable=True,
+            ) from exc
 
     def delete_bytes(self, key: str) -> None:
         self.client.delete_object(Bucket=self.bucket, Key=_validate_key(key))

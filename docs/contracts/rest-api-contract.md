@@ -19,6 +19,7 @@ POST     /patches/{id}/accept             POST /patches/{id}/reject
 POST     /exports                         GET /exports/{id}
 POST     /source-versions/{id}/index-rebuilds  GET /index-rebuilds/{job_id}
 GET/PUT  /workspace/retention-policy
+GET/PUT  /workspace/preferences
 ```
 
 Use 400 invalid request, 401 unauthenticated, 403 authorized identity lacking action without existence leak, 404 accessible resource absent, 409 version/state/idempotency conflict, 422 domain validation, 429 budget/rate, 503 transient dependency. Error body follows `error-taxonomy.md`.
@@ -34,3 +35,7 @@ Plan approval is represented by a durable approval request. Resolving an
 approval emits `approval.resolved` and resumes the same run/thread; rejected
 plans terminate the run without creating a canonical content version. Runs
 also expose redacted usage and bounded budget metadata in `RunOut`.
+Workspace preferences are typed, versioned, audited, and idempotent. Project
+configuration pins the effective workspace defaults; explicit project defaults
+override them within policy bounds. The UI reads and writes these preferences
+through the API rather than maintaining client-only settings.

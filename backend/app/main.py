@@ -39,6 +39,7 @@ from .schemas import (
     ExportOut,
     HealthResponse,
     IndexRebuildOut,
+    LivenessResponse,
     MemoryWrite,
     MessageCreate,
     PatchCreate,
@@ -46,6 +47,7 @@ from .schemas import (
     ProjectCreate,
     ProjectDetail,
     ProjectOut,
+    ReadinessResponse,
     RetentionPolicyOut,
     RetentionPolicyUpdate,
     RunOut,
@@ -55,6 +57,8 @@ from .schemas import (
     SourceOut,
     UploadFinalize,
     ValidationOut,
+    WorkspacePreferencesOut,
+    WorkspacePreferencesUpdate,
 )
 from .services import (
     accept_outline,
@@ -67,9 +71,11 @@ from .services import (
     execute_agent_turn,
     export_content,
     get_retention_policy,
+    get_workspace_preferences,
     list_run_approvals,
     list_skills,
     list_sources,
+    operational_snapshot,
     patch_out,
     project_detail,
     project_dto,
@@ -87,6 +93,7 @@ from .services import (
     seed_local,
     start_run,
     update_retention_policy,
+    update_workspace_preferences,
     upload_source,
     validate_content,
     validate_skill,
@@ -130,6 +137,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     @app.exception_handler(GroundloomError)
     async def groundloom_error_handler(request: Request, exc: GroundloomError):
         correlation_id = request.headers.get("X-Correlation-ID", "corr_unknown")
+        request.app.state.telemetry.emit(
+            "http.domain_error",
+            {"route": request.url.path, "code": exc.code, "status_code": exc.status_code},
+        )
         return JSONResponse(
             status_code=exc.status_code,
             content=ErrorBody(
@@ -143,6 +154,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @app.exception_handler(Exception)
     async def internal_error_handler(request: Request, exc: Exception):
+        request.app.state.telemetry.emit(
+            "http.internal_error",
+            {"route": request.url.path, "error_class": type(exc).__name__},
+        )
         return JSONResponse(
             status_code=500,
             content=ErrorBody(
@@ -189,8 +204,7 @@ def get_ctx(
 
 
 def register_routes(app: FastAPI) -> FastAPI:
-    @app.get("/health", response_model=HealthResponse)
-    def health(request: Request, db: Session = Depends(get_db)):
+    def _health_snapshot(request: Request, db: Session) -> dict:
         settings: Settings = request.app.state.settings
         try:
             db.execute(__import__("sqlalchemy").text("SELECT 1"))
@@ -198,13 +212,30 @@ def register_routes(app: FastAPI) -> FastAPI:
         except Exception:
             database = "degraded"
         object_store = "ok" if request.app.state.object_store.health() else "degraded"
+        operational = operational_snapshot(db, settings)
         return {
             "status": "ok" if database == object_store == "ok" else "degraded",
             "database": database,
             "object_store": object_store,
             "model_provider": settings.model_provider,
             "version": "0.1.0",
+            **operational,
         }
+
+    @app.get("/live", response_model=LivenessResponse)
+    def live() -> dict[str, str]:
+        return {"status": "ok"}
+
+    @app.get("/ready", response_model=ReadinessResponse)
+    def ready(request: Request, db: Session = Depends(get_db)):
+        snapshot = _health_snapshot(request, db)
+        if snapshot["status"] != "ok":
+            return JSONResponse(status_code=503, content=snapshot)
+        return snapshot
+
+    @app.get("/health", response_model=HealthResponse)
+    def health(request: Request, db: Session = Depends(get_db)):
+        return _health_snapshot(request, db)
 
     @app.get("/v1/projects", response_model=list[ProjectOut])
     def projects(db: Session = Depends(get_db), ctx: RuntimeContext = Depends(get_ctx)):
@@ -416,10 +447,18 @@ def register_routes(app: FastAPI) -> FastAPI:
             raise GroundloomError("RESOURCE_NOT_FOUND", "The run was not found.", 404)
         if run.status not in {"failed", "cancelled", "waiting_for_user", "waiting_for_approval"}:
             raise GroundloomError("INVALID_STATE", "This run cannot be resumed.", 409)
-        run.status = "running"
+        queue_for_worker = bool(
+            (
+                request.app.state.settings.env in {"staging", "production"}
+                and request.app.state.settings.model_provider != "local"
+            )
+            or not request.app.state.settings.agent_inline_local
+        )
+        run.status = "queued" if queue_for_worker else "running"
         run.cancel_requested = False
         db.commit()
-        execute_agent_turn(db, ctx, run, request.app.state.settings)
+        if not queue_for_worker:
+            execute_agent_turn(db, ctx, run, request.app.state.settings)
         return run
 
     @app.get("/v1/runs/{run_id}/approvals", response_model=list[ApprovalOut])
@@ -801,6 +840,34 @@ def register_routes(app: FastAPI) -> FastAPI:
         ctx: RuntimeContext = Depends(get_ctx),
     ):
         return update_retention_policy(db, ctx, body)
+
+    @app.get("/v1/workspace/preferences", response_model=WorkspacePreferencesOut)
+    def workspace_preferences_get(
+        db: Session = Depends(get_db), ctx: RuntimeContext = Depends(get_ctx)
+    ):
+        return get_workspace_preferences(db, ctx)
+
+    @app.put("/v1/workspace/preferences", response_model=WorkspacePreferencesOut)
+    def workspace_preferences_put(
+        body: WorkspacePreferencesUpdate,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        if idempotency_key:
+            existing = db.query(IdempotencyRecord).filter_by(workspace_id=ctx.workspace_id, key=idempotency_key).first()
+            if existing:
+                if existing.operation != "workspace.preferences.update":
+                    raise GroundloomError(
+                        "IDEMPOTENCY_CONFLICT",
+                        "The idempotency key was used for another operation.",
+                        409,
+                    )
+                return existing.response_json
+        result = update_workspace_preferences(db, ctx, body)
+        result = remember_idempotency(db, ctx, idempotency_key, "workspace.preferences.update", result)
+        db.commit()
+        return result
 
     @app.get("/v1/deletions/{deletion_id}", response_model=DeletionRequestOut)
     def deletion_get(

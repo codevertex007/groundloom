@@ -11,6 +11,10 @@ RETENTION_EXPORT_MIGRATION_ID = "003_retention_deletion_and_export_leases"
 INDEX_REBUILD_MIGRATION_ID = "004_index_rebuild_jobs"
 DELEGATED_WORKER_MIGRATION_ID = "005_delegated_task_leases"
 APPROVAL_USAGE_MIGRATION_ID = "006_approval_and_run_usage"
+WORKSPACE_PREFERENCES_MIGRATION_ID = "007_workspace_preferences"
+AGENT_RUN_WORKER_MIGRATION_ID = "008_agent_run_workers"
+WORKER_HEARTBEAT_MIGRATION_ID = "009_worker_heartbeats"
+BUDGET_CONTROLS_MIGRATION_ID = "010_budget_controls"
 
 
 def apply_migrations(database_url: str) -> None:
@@ -31,7 +35,24 @@ def apply_migrations(database_url: str) -> None:
             INDEX_REBUILD_MIGRATION_ID,
             DELEGATED_WORKER_MIGRATION_ID,
             APPROVAL_USAGE_MIGRATION_ID,
+            WORKSPACE_PREFERENCES_MIGRATION_ID,
+            AGENT_RUN_WORKER_MIGRATION_ID,
+            WORKER_HEARTBEAT_MIGRATION_ID,
+            BUDGET_CONTROLS_MIGRATION_ID,
         ]
+        preference_columns = {
+            column["name"] for column in inspect(engine).get_columns("workspace_preferences")
+        }
+        for name, sql_type, default in (
+            ("daily_token_budget", "INTEGER", "100000"),
+            ("daily_cost_budget_usd", "FLOAT", "25.0"),
+        ):
+            if name not in preference_columns:
+                connection.execute(
+                    text(
+                        f"ALTER TABLE workspace_preferences ADD COLUMN {name} {sql_type} DEFAULT {default}"
+                    )
+                )
         # create_all creates new tables but does not add columns to a prior
         # release. These additive columns are the only compatibility change in
         # this migration and are safe before the worker is upgraded.
@@ -64,6 +85,15 @@ def apply_migrations(database_url: str) -> None:
             if name not in run_columns:
                 connection.execute(
                     text(f"ALTER TABLE agent_runs ADD COLUMN {name} JSON DEFAULT '{{}}'")
+                )
+        for name, sql_type, default in (
+            ("attempts", "INTEGER", "0"),
+            ("lease_owner", "VARCHAR(120)", "NULL"),
+            ("lease_until", timestamp_type, "NULL"),
+        ):
+            if name not in run_columns:
+                connection.execute(
+                    text(f"ALTER TABLE agent_runs ADD COLUMN {name} {sql_type} DEFAULT {default}")
                 )
         for migration_id in migration_ids:
             if database_url.startswith("sqlite"):

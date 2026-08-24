@@ -22,6 +22,18 @@ class HealthResponse(BaseModel):
     object_store: str
     model_provider: str
     version: str
+    checkpointer: str = "not_configured"
+    worker_heartbeat: str = "unknown"
+    oldest_queue_age_seconds: float | None = None
+    config_fingerprint: str = ""
+
+
+class LivenessResponse(BaseModel):
+    status: Literal["ok"]
+
+
+class ReadinessResponse(HealthResponse):
+    pass
 
 
 class ProjectCreate(BaseModel):
@@ -271,6 +283,27 @@ class RetentionPolicyOut(ProductModel):
     exports_days: int
     audit_days: int
     legal_hold: bool
+
+
+class WorkspacePreferencesUpdate(BaseModel):
+    review_ai_edits: bool = True
+    require_citations: bool = True
+    default_export: Literal["pdf", "docx", "html", "md"] = "pdf"
+    require_plan_approval: bool = False
+    daily_token_budget: int = Field(default=100_000, ge=1_000, le=100_000_000)
+    daily_cost_budget_usd: float = Field(default=25.0, gt=0, le=1_000_000)
+
+
+class WorkspacePreferencesOut(ProductModel):
+    workspace_id: str
+    version_no: int
+    review_ai_edits: bool
+    require_citations: bool
+    default_export: str
+    require_plan_approval: bool
+    daily_token_budget: int
+    daily_cost_budget_usd: float
+    updated_at: datetime
 
 
 class IndexRebuildOut(ProductModel):

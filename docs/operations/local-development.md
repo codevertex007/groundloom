@@ -14,7 +14,14 @@ derived lexical index worker can be run with python
 backend/scripts/index_worker.py.
 The delegated specialist worker can be run with python
 backend/scripts/delegated_worker.py.
+The durable primary-agent worker can be run with python
+backend/scripts/agent_worker.py --once.
 development adapter renders exports inline by default; set
 GROUNDLOOM_EXPORT_INLINE_LOCAL=false to exercise the durable export worker.
+
+The local default keeps the deterministic agent inline. To exercise the durable
+agent path without external credentials, set
+`GROUNDLOOM_AGENT_INLINE_LOCAL=false` and run the agent worker with the local
+provider; staging/production always require the durable worker path.
 
 Fresh setup, reset of local disposable services, migrations, tests, and UI smoke must be reproducible on supported developer platforms. Production mode rejects local bypasses. Record exact package/runtime versions and troubleshooting for ports, migrations, worker leases, and callback URLs.

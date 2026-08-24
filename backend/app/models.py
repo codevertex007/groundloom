@@ -1,6 +1,6 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String, Text, UniqueConstraint
+from sqlalchemy import Boolean, DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column
 from sqlalchemy.types import JSON
@@ -29,6 +29,28 @@ class Workspace(TimeStamped, Base):
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     policy_json: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
+
+
+class WorkspacePreference(TimeStamped, Base):
+    __tablename__ = "workspace_preferences"
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), primary_key=True)
+    version_no: Mapped[int] = mapped_column(Integer, default=1, nullable=False)
+    review_ai_edits: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    require_citations: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    default_export: Mapped[str] = mapped_column(String(20), default="pdf", nullable=False)
+    require_plan_approval: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    daily_token_budget: Mapped[int] = mapped_column(Integer, default=100_000, nullable=False)
+    daily_cost_budget_usd: Mapped[float] = mapped_column(Float, default=25.0, nullable=False)
+
+
+class WorkerHeartbeat(TimeStamped, Base):
+    __tablename__ = "worker_heartbeats"
+    worker_id: Mapped[str] = mapped_column(String(120), primary_key=True)
+    worker_type: Mapped[str] = mapped_column(String(50), nullable=False, index=True)
+    workspace_id: Mapped[str | None] = mapped_column(String(80), nullable=True, index=True)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="healthy")
+    last_seen: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, nullable=False)
+    details_json: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
 
 
 class User(TimeStamped, Base):
@@ -215,6 +237,9 @@ class AgentRun(TimeStamped, Base):
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
     usage_json: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
     budget_json: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     @property
     def usage(self) -> dict:

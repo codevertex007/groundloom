@@ -22,6 +22,10 @@ if __name__ == "__main__":
             "004_index_rebuild_jobs",
             "005_delegated_task_leases",
             "006_approval_and_run_usage",
+            "007_workspace_preferences",
+            "008_agent_run_workers",
+            "009_worker_heartbeats",
+            "010_budget_controls",
         ]
         if applied != expected:
             raise SystemExit(f"Unexpected migration sequence: {applied}")

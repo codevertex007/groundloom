@@ -134,6 +134,65 @@ def test_plan_approval_interrupt_resumes_same_run_and_thread(tmp_path):
     assert event_types.count("patch.proposed") == 1
 
 
+def test_workspace_preferences_are_typed_audited_pinned_and_idempotent(tmp_path):
+    api = client(tmp_path)
+    initial = api.get("/v1/workspace/preferences", headers=headers())
+    assert initial.status_code == 200
+    assert initial.json()["version_no"] == 1
+    updated = api.put(
+        "/v1/workspace/preferences",
+        headers=headers(**{"Idempotency-Key": "workspace-prefs-1"}),
+        json={
+            "review_ai_edits": True,
+            "require_citations": False,
+            "default_export": "md",
+            "require_plan_approval": True,
+        },
+    )
+    assert updated.status_code == 200
+    assert updated.json()["version_no"] == 2
+    replay = api.put(
+        "/v1/workspace/preferences",
+        headers=headers(**{"Idempotency-Key": "workspace-prefs-1"}),
+        json={"default_export": "pdf"},
+    )
+    assert replay.status_code == 200 and replay.json() == updated.json()
+    project = api.post(
+        "/v1/projects",
+        headers=headers(),
+        json={"name": "Pinned preferences", "project_type": "brief", "brief": "Uses workspace defaults"},
+    )
+    assert project.status_code == 201
+    detail = api.get(f"/v1/projects/{project.json()['id']}", headers=headers()).json()
+    assert detail["config"]["defaults"]["require_plan_approval"] is True
+    assert detail["config"]["defaults"]["default_export"] == "md"
+
+
+def test_run_budget_stops_optional_work_with_durable_waiting_state(tmp_path):
+    api = client(tmp_path)
+    project = api.post(
+        "/v1/projects",
+        headers=headers(),
+        json={
+            "name": "Budgeted run",
+            "project_type": "brief",
+            "brief": "Budget boundary",
+            "defaults": {"max_estimated_tokens": 5},
+        },
+    ).json()
+    run = api.post(
+        f"/v1/projects/{project['id']}/threads/messages",
+        headers=headers(**{"Idempotency-Key": "budget-run-1"}),
+        json={"text": "Generate a draft that must stop at the configured budget"},
+    )
+    assert run.status_code == 202
+    assert run.json()["status"] == "waiting_for_user"
+    assert run.json()["error_code"] == "BUDGET_EXCEEDED"
+    detail = api.get(f"/v1/projects/{project['id']}", headers=headers()).json()
+    events = api.get(f"/v1/threads/{detail['thread_id']}/events", headers=headers()).json()
+    assert any(event["type"] == "budget.stopped" for event in events)
+
+
 def test_local_agent_trajectory_skips_delegation_for_initialization(tmp_path):
     api = client(tmp_path)
     project = api.post(

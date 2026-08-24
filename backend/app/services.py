@@ -49,7 +49,9 @@ from .models import (
     User,
     ValidationFinding,
     ValidationRun,
+    WorkerHeartbeat,
     Workspace,
+    WorkspacePreference,
     utcnow,
 )
 from .object_store import build_object_store
@@ -65,6 +67,7 @@ from .schemas import (
     SkillAuthorDraftCreate,
     SkillCreate,
     UploadFinalize,
+    WorkspacePreferencesUpdate,
 )
 
 
@@ -110,6 +113,69 @@ def outbox(
             payload=payload,
         )
     )
+
+
+def touch_worker_heartbeat(
+    db: Session,
+    worker_id: str,
+    worker_type: str,
+    workspace_id: str | None = None,
+    *,
+    status: str = "healthy",
+    details: dict[str, Any] | None = None,
+) -> WorkerHeartbeat:
+    heartbeat = db.get(WorkerHeartbeat, worker_id)
+    if not heartbeat:
+        heartbeat = WorkerHeartbeat(
+            worker_id=worker_id,
+            worker_type=worker_type,
+            workspace_id=workspace_id,
+            status=status,
+            details_json=details or {},
+        )
+        db.add(heartbeat)
+    else:
+        heartbeat.worker_type = worker_type
+        heartbeat.workspace_id = workspace_id
+        heartbeat.status = status
+        heartbeat.details_json = details or heartbeat.details_json
+    heartbeat.last_seen = utcnow()
+    db.flush()
+    return heartbeat
+
+
+def operational_snapshot(db: Session, settings: Settings) -> dict[str, Any]:
+    """Return bounded operational signals without exposing tenant content."""
+    now = utcnow()
+    heartbeat = (
+        db.query(WorkerHeartbeat)
+        .order_by(WorkerHeartbeat.last_seen.desc())
+        .first()
+    )
+    worker_status = "unknown"
+    if heartbeat:
+        age = (now - heartbeat.last_seen).total_seconds()
+        worker_status = (
+            "ok" if age <= settings.worker_heartbeat_timeout_seconds else "stale"
+        )
+    queue_age: float | None = None
+    for model in (AgentRun, IngestionJob, IndexRebuildJob, ExportJob, DelegatedTask, DeletionRequest):
+        status_column = model.status
+        row = (
+            db.query(model.created_at)
+            .filter(status_column.in_(["queued", "pending"]))
+            .order_by(model.created_at)
+            .first()
+        )
+        if row and row[0]:
+            age = max(0.0, (now - row[0]).total_seconds())
+            queue_age = age if queue_age is None else max(queue_age, age)
+    return {
+        "checkpointer": "local" if settings.checkpoint_backend == "local" else "configured",
+        "worker_heartbeat": worker_status,
+        "oldest_queue_age_seconds": queue_age,
+        "config_fingerprint": settings.effective_config_fingerprint(),
+    }
 
 
 def remember_idempotency(
@@ -190,6 +256,8 @@ def seed_local(db: Session, settings: Settings) -> None:
                 active=True,
             )
         )
+    if not db.get(WorkspacePreference, settings.local_workspace_id):
+        db.add(WorkspacePreference(workspace_id=settings.local_workspace_id))
     starter = db.query(Skill).filter_by(slug="source-grounded-writing", workspace_id=None).first()
     if not starter:
         starter = Skill(
@@ -246,6 +314,16 @@ def create_project(
         skill_version = db.query(SkillVersion).filter_by(id=version_id, status="published").first()
         if not skill_version or (skill_version.workspace_id not in (None, ctx.workspace_id)):
             raise GroundloomError("PERMISSION_DENIED", "A selected skill is unavailable.", 403)
+    preferences = ensure_workspace_preferences(db, ctx.workspace_id)
+    effective_defaults = {
+        "review_ai_edits": preferences.review_ai_edits,
+        "require_citations": preferences.require_citations,
+        "default_export": preferences.default_export,
+        "require_plan_approval": preferences.require_plan_approval,
+        "daily_token_budget": preferences.daily_token_budget,
+        "daily_cost_budget_usd": preferences.daily_cost_budget_usd,
+        **body.defaults,
+    }
     project = Project(
         workspace_id=ctx.workspace_id,
         id=new_id("prj"),
@@ -262,7 +340,7 @@ def create_project(
         version_no=1,
         source_version_ids=body.source_version_ids,
         skill_version_ids=body.skill_version_ids,
-        defaults_json=body.defaults,
+        defaults_json=effective_defaults,
         actor_id=ctx.user_id,
     )
     db.add(config)
@@ -428,12 +506,19 @@ def start_run(
         if project.current_config_version_id
         else None
     )
+    queue_for_worker = bool(
+        settings
+        and (
+            (settings.env in {"staging", "production"} and settings.model_provider != "local")
+            or not settings.agent_inline_local
+        )
+    )
     run = AgentRun(
         id=new_id("run"),
         workspace_id=ctx.workspace_id,
         project_id=project.id,
         thread_id=thread.id,
-        status="running",
+        status="queued" if queue_for_worker else "running",
         request_text=request_text,
         idempotency_key=idempotency_key,
         pinned_config_json={
@@ -449,22 +534,126 @@ def start_run(
             ),
             "retrieval_version": "lexical.v1",
             "evaluator_version": "deterministic.v1",
+            "actor_id": ctx.user_id,
+            "correlation_id": ctx.correlation_id,
         },
         budget_json={
             "max_estimated_tokens": int((config.defaults_json if config else {}).get("max_estimated_tokens", 12000)),
             "max_tool_calls": int((config.defaults_json if config else {}).get("max_tool_calls", 40)),
+            "max_cost_usd": float((config.defaults_json if config else {}).get("max_cost_usd", 1.0)),
         },
     )
     db.add(run)
     project.current_run_id = run.id
     db.flush()
-    append_event(db, ctx, run, "run.started", {"status": "running", "request": request_text[:500]})
+    append_event(
+        db,
+        ctx,
+        run,
+        "run.started",
+        {"status": run.status, "request": request_text[:500]},
+    )
     db.commit()
-    execute_agent_turn(db, ctx, run, settings)
+    if not queue_for_worker:
+        execute_agent_turn(db, ctx, run, settings)
     completed = db.get(AgentRun, run.id)
     if completed is None:
         raise GroundloomError("INTERNAL_ERROR", "The run disappeared before completion.", 500)
     return completed
+
+
+def claim_agent_runs(
+    db: Session, worker_id: str, *, limit: int = 10, lease_seconds: int = 300,
+    max_attempts: int = 3,
+) -> list[AgentRun]:
+    now = utcnow()
+    rows = (
+        db.query(AgentRun)
+        .filter(
+            (AgentRun.status == "queued")
+            | ((AgentRun.status == "running") & (AgentRun.lease_until < now))
+        )
+        .filter(AgentRun.attempts < max_attempts)
+        .order_by(AgentRun.created_at)
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+    for run in rows:
+        run.status = "running"
+        run.attempts += 1
+        run.lease_owner = worker_id
+        run.lease_until = now + timedelta(seconds=lease_seconds)
+    db.commit()
+    return rows
+
+
+def run_agent_worker_once(
+    db: Session, settings: Settings, worker_id: str, *, limit: int = 10
+) -> dict[str, int]:
+    touch_worker_heartbeat(db, worker_id, "agent", status="healthy", details={"limit": limit})
+    db.commit()
+    claimed = claim_agent_runs(
+        db,
+        worker_id,
+        limit=limit,
+        lease_seconds=300,
+        max_attempts=max(1, settings.agent_max_attempts),
+    )
+    completed = failed = requeued = 0
+    for run in claimed:
+        actor_id = str(run.pinned_config_json.get("actor_id", settings.local_user_id))
+        membership = (
+            db.query(Membership)
+            .filter_by(workspace_id=run.workspace_id, user_id=actor_id, active=True)
+            .first()
+        )
+        if not membership:
+            run.status = "failed"
+            run.error_code = "WORKER_IDENTITY_UNAVAILABLE"
+            run.lease_owner = None
+            run.lease_until = None
+            failed += 1
+            db.commit()
+            continue
+        ctx = RuntimeContext(
+            user_id=actor_id,
+            workspace_id=run.workspace_id,
+            roles=frozenset({membership.role}),
+            correlation_id=str(run.pinned_config_json.get("correlation_id", f"worker:{worker_id}")),
+        )
+        try:
+            execute_agent_turn(db, ctx, run, settings)
+            refreshed = db.get(AgentRun, run.id)
+            if refreshed and refreshed.status in {"completed", "waiting_for_approval", "waiting_for_user"}:
+                completed += 1
+            elif refreshed and refreshed.status == "failed":
+                failed += 1
+            else:
+                requeued += 1
+        except Exception:
+            db.rollback()
+            refreshed = db.get(AgentRun, run.id)
+            if refreshed and refreshed.status not in {"failed", "completed", "cancelled"}:
+                refreshed.status = "queued" if refreshed.attempts < settings.agent_max_attempts else "failed"
+                refreshed.error_code = "AGENT_WORKER_FAILED"
+                refreshed.lease_owner = None
+                refreshed.lease_until = None
+                if refreshed.status == "queued":
+                    requeued += 1
+                else:
+                    failed += 1
+                db.commit()
+            else:
+                failed += 1
+    result = {
+        "claimed": len(claimed),
+        "completed": completed,
+        "requeued": requeued,
+        "failed": failed,
+    }
+    touch_worker_heartbeat(db, worker_id, "agent", status="healthy", details=result)
+    db.commit()
+    return result
 
 
 def approval_dto(approval: ApprovalRequest) -> dict[str, Any]:
@@ -541,9 +730,17 @@ def resolve_approval(
             **run.pinned_config_json,
             "approved_outline_id": approval.payload_json.get("outline_version_id"),
         }
-        run.status = "running"
+        queue_for_worker = bool(
+            (
+                settings.env in {"staging", "production"}
+                and settings.model_provider != "local"
+            )
+            or not settings.agent_inline_local
+        )
+        run.status = "queued" if queue_for_worker else "running"
         db.commit()
-        execute_agent_turn(db, ctx, run, settings)
+        if not queue_for_worker:
+            execute_agent_turn(db, ctx, run, settings)
     else:
         run.status = "cancelled"
         run.error_code = "PLAN_REJECTED"
@@ -616,9 +813,85 @@ def search_evidence(
     )
 
 
+def enforce_run_budget(db: Session, ctx: RuntimeContext, run: AgentRun) -> bool:
+    """Stop optional agent work before a configured per-run/workspace budget is exceeded."""
+    usage = run.usage_json or {}
+    estimated_tokens = int(usage.get("estimated_input_tokens", 0)) + int(
+        usage.get("output_tokens", 0)
+    )
+    tool_calls = int(usage.get("tool_calls", 0))
+    estimated_cost = float(usage.get("estimated_cost_usd", 0.0))
+    per_run_tokens = int((run.budget_json or {}).get("max_estimated_tokens", 12_000))
+    per_run_tools = int((run.budget_json or {}).get("max_tool_calls", 40))
+    per_run_cost = float((run.budget_json or {}).get("max_cost_usd", 1.0))
+    day_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+    workspace_runs = (
+        db.query(AgentRun)
+        .filter(AgentRun.workspace_id == ctx.workspace_id, AgentRun.created_at >= day_start)
+        .all()
+    )
+    workspace_tokens = 0
+    workspace_cost = 0.0
+    for other in workspace_runs:
+        if other.id == run.id:
+            continue
+        other_usage = other.usage_json or {}
+        workspace_tokens += int(other_usage.get("estimated_input_tokens", 0)) + int(
+            other_usage.get("output_tokens", 0)
+        )
+        workspace_cost += float(other_usage.get("estimated_cost_usd", 0.0))
+    preferences = ensure_workspace_preferences(db, ctx.workspace_id)
+    stop_reason: str | None = None
+    if estimated_tokens > per_run_tokens:
+        stop_reason = "The request exceeds the per-run token budget."
+    elif tool_calls > per_run_tools:
+        stop_reason = "The request exceeds the per-run tool budget."
+    elif estimated_cost > per_run_cost:
+        stop_reason = "The request exceeds the per-run cost budget."
+    elif workspace_tokens + estimated_tokens > preferences.daily_token_budget:
+        stop_reason = "The workspace daily token budget has been reached."
+    elif workspace_cost + estimated_cost > preferences.daily_cost_budget_usd:
+        stop_reason = "The workspace daily cost budget has been reached."
+    if stop_reason is None:
+        return False
+    run.status = "waiting_for_user"
+    run.error_code = "BUDGET_EXCEEDED"
+    add_todo(db, ctx, run, "Review or increase the active budget before continuing", "waiting_for_user", 99)
+    append_event(
+        db,
+        ctx,
+        run,
+        "budget.stopped",
+        {
+            "status": "waiting_for_user",
+            "estimated_tokens": estimated_tokens,
+            "tool_calls": tool_calls,
+            "reason": stop_reason,
+        },
+    )
+    append_event(
+        db,
+        ctx,
+        run,
+        "run.waiting",
+        {"status": "waiting_for_user", "reason": "Budget approval or adjustment is required."},
+    )
+    audit(db, ctx, "run.budget_stopped", "agent_run", run.id, "Stopped optional agent work at a budget boundary")
+    db.commit()
+    return True
+
+
 def execute_deep_agent_turn(
     db: Session, ctx: RuntimeContext, run: AgentRun, settings: Settings
 ) -> None:
+    run.usage_json = {
+        "estimated_input_tokens": max(1, len(run.request_text) // 4),
+        "output_tokens": 0,
+        "tool_calls": 0,
+        "estimated_cost_usd": 0.0,
+    }
+    if enforce_run_budget(db, ctx, run):
+        return
     from .agent_runtime import build_agent_runtime
 
     thread = db.query(AgentThread).filter_by(id=run.thread_id, workspace_id=ctx.workspace_id).first()
@@ -710,6 +983,8 @@ def execute_agent_turn(
         "tool_calls": 0,
         "estimated_cost_usd": 0.0,
     }
+    if enforce_run_budget(db, ctx, run):
+        return
     if run.cancel_requested:
         run.status = "cancelled"
         append_event(db, ctx, run, "run.cancelled", {"status": "cancelled"})
@@ -747,6 +1022,8 @@ def execute_agent_turn(
         },
     )
     run.usage_json = {**run.usage_json, "tool_calls": 1}
+    if enforce_run_budget(db, ctx, run):
+        return
     wants_draft = any(word in text for word in ("draft", "generate", "outline", "write", "create"))
     if not wants_draft:
         add_todo(db, ctx, run, "Answer the grounded project question", "completed", 1)
@@ -843,7 +1120,12 @@ def execute_agent_turn(
                 "objective": task.objective,
             },
         )
-    requires_approval = bool((config.defaults_json if config else {}).get("require_plan_approval")) or (
+    configured_approval = (
+        config.defaults_json.get("require_plan_approval")
+        if config and "require_plan_approval" in config.defaults_json
+        else ensure_workspace_preferences(db, ctx.workspace_id).require_plan_approval
+    )
+    requires_approval = bool(configured_approval) or (
         "approve the plan" in text or "plan approval" in text
     )
     if requires_approval:
@@ -1129,6 +1411,8 @@ def process_delegated_task(
 def run_delegated_worker_once(
     db: Session, ctx: RuntimeContext, worker_id: str, *, limit: int = 10
 ) -> dict[str, int]:
+    touch_worker_heartbeat(db, worker_id, "delegated", ctx.workspace_id, details={"limit": limit})
+    db.commit()
     claimed = claim_delegated_tasks(db, ctx.workspace_id, worker_id, limit=limit)
     completed = cancelled = failed = 0
     for task in claimed:
@@ -1149,12 +1433,15 @@ def run_delegated_worker_once(
                 audit(db, ctx, "delegated_task.failed", "delegated_task", failed_task.id, "Specialist task failed", "failure")
                 db.commit()
             failed += 1
-    return {
+    worker_summary = {
         "claimed": len(claimed),
         "completed": completed,
         "cancelled": cancelled,
         "failed": failed,
     }
+    touch_worker_heartbeat(db, worker_id, "delegated", ctx.workspace_id, details=worker_summary)
+    db.commit()
+    return worker_summary
 
 
 def reconcile_delegated_tasks(
@@ -1453,6 +1740,8 @@ def run_ingestion_worker_once(
     *,
     limit: int = 10,
 ) -> dict[str, int]:
+    touch_worker_heartbeat(db, worker_id, "ingestion", ctx.workspace_id, details={"limit": limit})
+    db.commit()
     claimed = claim_ingestion_jobs(db, ctx.workspace_id, worker_id, limit=limit)
     completed = 0
     failed = 0
@@ -1488,7 +1777,10 @@ def run_ingestion_worker_once(
                     failed_version.failure_code = exc.code
                 db.commit()
             failed += 1
-    return {"claimed": len(claimed), "completed": completed, "failed": failed}
+    result = {"claimed": len(claimed), "completed": completed, "failed": failed}
+    touch_worker_heartbeat(db, worker_id, "ingestion", ctx.workspace_id, details=result)
+    db.commit()
+    return result
 
 
 def request_index_rebuild(
@@ -1616,6 +1908,8 @@ def process_index_rebuild_job(
 def run_index_rebuild_worker_once(
     db: Session, ctx: RuntimeContext, worker_id: str, *, limit: int = 10
 ) -> dict[str, int]:
+    touch_worker_heartbeat(db, worker_id, "index", ctx.workspace_id, details={"limit": limit})
+    db.commit()
     claimed = claim_index_rebuild_jobs(db, ctx.workspace_id, worker_id, limit=limit)
     completed = failed = 0
     for job in claimed:
@@ -1633,7 +1927,10 @@ def run_index_rebuild_worker_once(
                 audit(db, ctx, "source.index_rebuild.failed", "index_rebuild_job", failed_job.id, "Derived index rebuild failed", "failure")
                 db.commit()
             failed += 1
-    return {"claimed": len(claimed), "completed": completed, "failed": failed}
+    result = {"claimed": len(claimed), "completed": completed, "failed": failed}
+    touch_worker_heartbeat(db, worker_id, "index", ctx.workspace_id, details=result)
+    db.commit()
+    return result
 
 
 def append_source_stage(
@@ -2511,6 +2808,8 @@ def run_export_worker_once(
     *,
     limit: int = 10,
 ) -> dict[str, int]:
+    touch_worker_heartbeat(db, worker_id, "export", ctx.workspace_id, details={"limit": limit})
+    db.commit()
     claimed = claim_export_jobs(db, ctx.workspace_id, worker_id, limit=limit)
     completed = 0
     failed = 0
@@ -2537,7 +2836,75 @@ def run_export_worker_once(
                 )
                 db.commit()
             failed += 1
-    return {"claimed": len(claimed), "completed": completed, "failed": failed}
+    result = {"claimed": len(claimed), "completed": completed, "failed": failed}
+    touch_worker_heartbeat(db, worker_id, "export", ctx.workspace_id, details=result)
+    db.commit()
+    return result
+
+
+def ensure_workspace_preferences(db: Session, workspace_id: str) -> WorkspacePreference:
+    preferences = db.get(WorkspacePreference, workspace_id)
+    if not preferences:
+        preferences = WorkspacePreference(workspace_id=workspace_id)
+        db.add(preferences)
+        db.flush()
+    return preferences
+
+
+def workspace_preferences_dto(preferences: WorkspacePreference) -> dict[str, Any]:
+    return {
+        "workspace_id": preferences.workspace_id,
+        "version_no": preferences.version_no,
+        "review_ai_edits": preferences.review_ai_edits,
+        "require_citations": preferences.require_citations,
+        "default_export": preferences.default_export,
+        "require_plan_approval": preferences.require_plan_approval,
+        "daily_token_budget": preferences.daily_token_budget,
+        "daily_cost_budget_usd": preferences.daily_cost_budget_usd,
+        "updated_at": preferences.updated_at.isoformat(),
+    }
+
+
+def get_workspace_preferences(db: Session, ctx: RuntimeContext) -> dict[str, Any]:
+    ctx.require(
+        "read workspace preferences",
+        {"viewer", "author", "reviewer", "workspace_admin", "organization_admin"},
+    )
+    preferences = ensure_workspace_preferences(db, ctx.workspace_id)
+    db.commit()
+    return workspace_preferences_dto(preferences)
+
+
+def update_workspace_preferences(
+    db: Session, ctx: RuntimeContext, body: WorkspacePreferencesUpdate
+) -> dict[str, Any]:
+    ctx.require("update workspace preferences", {"workspace_admin", "organization_admin"})
+    preferences = ensure_workspace_preferences(db, ctx.workspace_id)
+    preferences.review_ai_edits = body.review_ai_edits
+    preferences.require_citations = body.require_citations
+    preferences.default_export = body.default_export
+    preferences.require_plan_approval = body.require_plan_approval
+    preferences.daily_token_budget = body.daily_token_budget
+    preferences.daily_cost_budget_usd = body.daily_cost_budget_usd
+    preferences.version_no += 1
+    audit(
+        db,
+        ctx,
+        "workspace.preferences.updated",
+        "workspace_preferences",
+        ctx.workspace_id,
+        "Updated typed workspace preferences",
+    )
+    outbox(
+        db,
+        ctx.workspace_id,
+        "WorkspacePreferencesUpdated",
+        "workspace",
+        ctx.workspace_id,
+        {"workspace_id": ctx.workspace_id, "version_no": preferences.version_no},
+    )
+    db.commit()
+    return workspace_preferences_dto(preferences)
 
 
 def ensure_retention_policy(db: Session, workspace_id: str) -> RetentionPolicy:
@@ -2853,6 +3220,8 @@ def process_deletion_request(
 def run_deletion_worker_once(
     db: Session, ctx: RuntimeContext, settings: Settings, worker_id: str, *, limit: int = 10
 ) -> dict[str, int]:
+    touch_worker_heartbeat(db, worker_id, "retention", ctx.workspace_id, details={"limit": limit})
+    db.commit()
     claimed = claim_deletion_requests(db, ctx.workspace_id, worker_id, limit=limit)
     completed = blocked = failed = 0
     for request in claimed:
@@ -2863,7 +3232,10 @@ def run_deletion_worker_once(
             blocked += 1
         elif result.status == "failed":
             failed += 1
-    return {"claimed": len(claimed), "completed": completed, "blocked": blocked, "failed": failed}
+    worker_summary = {"claimed": len(claimed), "completed": completed, "blocked": blocked, "failed": failed}
+    touch_worker_heartbeat(db, worker_id, "retention", ctx.workspace_id, details=worker_summary)
+    db.commit()
+    return worker_summary
 
 
 def render_content(title: str, blocks: list[ContentBlock], format: str) -> bytes:

@@ -60,16 +60,26 @@ class LangfuseTelemetry:
             base_url=host,
             tracing_enabled=True,
         )
+        self.dropped_events = 0
+        self.last_error_class: str | None = None
 
     def emit(self, event: str, attributes: dict[str, Any]) -> None:
         safe = redact(attributes)
-        self.client.create_event(name=event, metadata=safe)
+        try:
+            self.client.create_event(name=event, metadata=safe)
+        except Exception as exc:  # telemetry must never break product state
+            self.dropped_events += 1
+            self.last_error_class = type(exc).__name__
 
     def flush(self) -> None:
-        self.client.flush()
+        try:
+            self.client.flush()
+        except Exception as exc:  # telemetry remains best-effort
+            self.dropped_events += 1
+            self.last_error_class = type(exc).__name__
 
     def record_evaluation(self, report: dict[str, Any]) -> None:
-        self.client.create_event(name="evaluation.completed", metadata=redact(report))
+        self.emit("evaluation.completed", report)
 
 
 def record_evaluation(telemetry: Any, report: dict[str, Any]) -> None:

@@ -14,6 +14,9 @@ telemetry. Deployment settings select `checkpoint_backend=postgres`,
 Optional dependency groups are `agent`, `storage`, and `observability`.
 Provider calls use at most `agent_max_attempts` (default 3) with bounded
 exponential backoff; cancellation is checked before each retry.
+`agent_inline_local=true` is the explicit local/test convenience default. It
+must be disabled for production; staging/production agent runs are queued for
+the durable agent worker and are never completed synchronously by the API.
 `auth_mode=local` is limited to development/test. Staging and production use
 the signed runtime-context adapter (`auth_mode=hmac`) or a deployment-provided
 OIDC/JWT implementation at the same boundary; raw identity headers are ignored

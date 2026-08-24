@@ -1,3 +1,5 @@
+import hashlib
+import json
 from functools import lru_cache
 from pathlib import Path
 from typing import Literal
@@ -42,6 +44,8 @@ class Settings(BaseSettings):
     agent_max_attempts: int = 3
     agent_retry_backoff_seconds: float = 0.25
     export_inline_local: bool | None = None
+    agent_inline_local: bool = True
+    worker_heartbeat_timeout_seconds: int = 120
     event_retention_days: int = 90
     auth_secret: str | None = None
     auth_mode: str = "local"
@@ -71,6 +75,8 @@ class Settings(BaseSettings):
                 raise RuntimeError("Production requires the Postgres checkpoint backend")
             if self.export_inline_local is True:
                 raise RuntimeError("Production requires exports to run through the durable worker")
+            if self.agent_inline_local:
+                raise RuntimeError("Production requires agent runs to use the durable worker")
             if not self.auth_secret:
                 raise RuntimeError("Production requires auth encryption configuration")
             if len(self.auth_secret) < 32:
@@ -88,6 +94,24 @@ class Settings(BaseSettings):
                 (self.langfuse_public_key, self.langfuse_secret_key, self.langfuse_host)
             ):
                 raise RuntimeError("Production Langfuse telemetry requires keys and host")
+
+    def effective_config_fingerprint(self) -> str:
+        """Return a stable fingerprint over non-secret effective settings."""
+        safe = {
+            "env": self.env,
+            "database_backend": self.database_url.split(":", 1)[0],
+            "checkpoint_backend": self.checkpoint_backend,
+            "object_store_backend": self.object_store_backend,
+            "model_provider": self.model_provider,
+            "model_name": self.model_name,
+            "telemetry_provider": self.telemetry_provider,
+            "agent_inline_local": self.agent_inline_local,
+            "agent_max_attempts": self.agent_max_attempts,
+            "event_retention_days": self.event_retention_days,
+        }
+        return hashlib.sha256(
+            json.dumps(safe, sort_keys=True, separators=(",", ":")).encode("utf-8")
+        ).hexdigest()[:16]
 
 
 @lru_cache

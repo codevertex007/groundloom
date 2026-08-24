@@ -47,7 +47,24 @@ def test_openapi_contains_contract_boundary(tmp_path):
     assert "/v1/deletions/{deletion_id}" in schema["paths"]
     assert "/v1/source-versions/{version_id}/index-rebuilds" in schema["paths"]
     assert "/v1/index-rebuilds/{job_id}" in schema["paths"]
+    assert "/v1/workspace/preferences" in schema["paths"]
+    assert "/ready" in schema["paths"] and "/live" in schema["paths"]
     json.dumps(schema)
+
+
+def test_health_readiness_and_liveness_expose_bounded_operational_state(tmp_path):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'health.db'}", object_store_path=tmp_path / "objects"
+    )
+    api = TestClient(create_app(settings))
+    assert api.get("/live").json() == {"status": "ok"}
+    ready = api.get("/ready")
+    assert ready.status_code == 200
+    body = api.get("/health").json()
+    assert body["status"] == "ok"
+    assert body["checkpointer"] == "local"
+    assert len(body["config_fingerprint"]) == 16
+    assert body["oldest_queue_age_seconds"] is None or body["oldest_queue_age_seconds"] >= 0
 
 
 def test_checkpoint_scope_and_redacted_telemetry(tmp_path):
