@@ -52,3 +52,20 @@ test("SSE reconnect resumes from the last durable event id without duplicate par
   assert.ok(statuses.includes("offline"));
   globalThis.fetch = originalFetch;
 });
+
+test("queued exports are polled to a terminal artifact or typed failure", async () => {
+  const originalFetch = globalThis.fetch;
+  let calls = 0;
+  globalThis.fetch = async (url) => {
+    calls += 1;
+    const body = calls === 1
+      ? { id: "exp-1", status: "queued" }
+      : { id: "exp-1", status: "completed", download_url: "/v1/exports/exp-1/download" };
+    assert.match(String(url), calls === 1 ? /\/v1\/exports$/ : /\/v1\/exports\/exp-1$/);
+    return new Response(JSON.stringify(body), { status: 200 });
+  };
+  const result = await api("/v1/exports", { method: "POST", body: "{}" });
+  assert.equal(result.status, "completed");
+  assert.equal(calls, 2);
+  globalThis.fetch = originalFetch;
+});

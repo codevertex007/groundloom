@@ -27,6 +27,7 @@ from .models import (
     DeletionRequest,
     ExportJob,
     IdempotencyRecord,
+    IndexRebuildJob,
     IngestionJob,
     Membership,
     MemoryItem,
@@ -1179,6 +1180,151 @@ def run_ingestion_worker_once(
                 if failed_version:
                     failed_version.status = "failed"
                     failed_version.failure_code = exc.code
+                db.commit()
+            failed += 1
+    return {"claimed": len(claimed), "completed": completed, "failed": failed}
+
+
+def request_index_rebuild(
+    db: Session, ctx: RuntimeContext, source_version_id: str
+) -> IndexRebuildJob:
+    ctx.require("rebuild source index", {"workspace_admin", "organization_admin"})
+    version = (
+        db.query(SourceVersion)
+        .filter_by(id=source_version_id, workspace_id=ctx.workspace_id)
+        .first()
+    )
+    if not version:
+        raise GroundloomError("RESOURCE_NOT_FOUND", "The source version was not found.", 404)
+    if version.status != "ready":
+        raise GroundloomError("SOURCE_NOT_READY", "Only ready source versions can be rebuilt.", 409)
+    existing = (
+        db.query(IndexRebuildJob)
+        .filter_by(workspace_id=ctx.workspace_id, source_version_id=source_version_id)
+        .filter(IndexRebuildJob.status.in_(["queued", "running"]))
+        .first()
+    )
+    if existing:
+        return existing
+    job = IndexRebuildJob(
+        id=new_id("idx"),
+        workspace_id=ctx.workspace_id,
+        source_version_id=source_version_id,
+        status="queued",
+    )
+    db.add(job)
+    audit(db, ctx, "source.index_rebuild.requested", "index_rebuild_job", job.id, "Queued derived index rebuild")
+    outbox(
+        db,
+        ctx.workspace_id,
+        "SourceIndexRebuildRequested",
+        "index_rebuild_job",
+        job.id,
+        {"job_id": job.id, "source_version_id": source_version_id},
+    )
+    db.commit()
+    return job
+
+
+def claim_index_rebuild_jobs(
+    db: Session,
+    workspace_id: str,
+    worker_id: str,
+    *,
+    limit: int = 10,
+    lease_seconds: int = 300,
+) -> list[IndexRebuildJob]:
+    now = utcnow()
+    rows = (
+        db.query(IndexRebuildJob)
+        .filter(IndexRebuildJob.workspace_id == workspace_id)
+        .filter(
+            (IndexRebuildJob.status == "queued")
+            | ((IndexRebuildJob.status == "running") & (IndexRebuildJob.lease_until < now))
+        )
+        .order_by(IndexRebuildJob.created_at)
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+    for row in rows:
+        row.status = "running"
+        row.lease_owner = worker_id
+        row.lease_until = now + timedelta(seconds=lease_seconds)
+        row.attempts += 1
+    db.commit()
+    return rows
+
+
+def process_index_rebuild_job(
+    db: Session, ctx: RuntimeContext, job: IndexRebuildJob
+) -> IndexRebuildJob:
+    if job.workspace_id != ctx.workspace_id:
+        raise GroundloomError("FORBIDDEN", "The index job is outside the workspace scope.", 403)
+    version = (
+        db.query(SourceVersion)
+        .filter_by(id=job.source_version_id, workspace_id=ctx.workspace_id)
+        .first()
+    )
+    if not version:
+        raise GroundloomError("RESOURCE_NOT_FOUND", "The source version was not found.", 404)
+    blocks = (
+        db.query(SourceBlock)
+        .filter_by(source_version_id=version.id, workspace_id=ctx.workspace_id)
+        .order_by(SourceBlock.block_no)
+        .all()
+    )
+    db.query(SourceChunk).filter_by(
+        source_version_id=version.id, workspace_id=ctx.workspace_id
+    ).delete(synchronize_session=False)
+    for block in blocks:
+        terms = sorted(set(re.findall(r"[a-z0-9]{3,}", block.text.lower())))
+        db.add(
+            SourceChunk(
+                id=new_id("chk"),
+                workspace_id=ctx.workspace_id,
+                source_version_id=version.id,
+                source_block_id=block.id,
+                chunk_no=0,
+                text=block.text[:5000],
+                token_terms=terms,
+                embedding_json=None,
+            )
+        )
+    job.status = "completed"
+    job.error_code = None
+    job.lease_owner = None
+    job.lease_until = None
+    audit(db, ctx, "source.index_rebuild.completed", "index_rebuild_job", job.id, "Rebuilt derived lexical index")
+    outbox(
+        db,
+        ctx.workspace_id,
+        "SourceIndexRebuildCompleted",
+        "index_rebuild_job",
+        job.id,
+        {"job_id": job.id, "source_version_id": version.id, "chunk_count": len(blocks)},
+    )
+    db.commit()
+    return job
+
+
+def run_index_rebuild_worker_once(
+    db: Session, ctx: RuntimeContext, worker_id: str, *, limit: int = 10
+) -> dict[str, int]:
+    claimed = claim_index_rebuild_jobs(db, ctx.workspace_id, worker_id, limit=limit)
+    completed = failed = 0
+    for job in claimed:
+        try:
+            process_index_rebuild_job(db, ctx, job)
+            completed += 1
+        except Exception as exc:
+            db.rollback()
+            failed_job = db.query(IndexRebuildJob).filter_by(id=job.id, workspace_id=ctx.workspace_id).first()
+            if failed_job:
+                failed_job.status = "failed"
+                failed_job.error_code = exc.code if isinstance(exc, GroundloomError) else "INDEX_REBUILD_FAILED"
+                failed_job.lease_owner = None
+                failed_job.lease_until = None
+                audit(db, ctx, "source.index_rebuild.failed", "index_rebuild_job", failed_job.id, "Derived index rebuild failed", "failure")
                 db.commit()
             failed += 1
     return {"claimed": len(claimed), "completed": completed, "failed": failed}

@@ -215,6 +215,7 @@ class ExportOut(ProductModel):
     object_key: str | None = None
     download_url: str | None = None
     expires_at: datetime | None = None
+    error_code: str | None = None
 
 
 class DeletionRequestCreate(BaseModel):
@@ -230,6 +231,14 @@ class DeletionRequestOut(ProductModel):
     step_status: dict[str, Any]
     error_code: str | None = None
     completed_at: datetime | None = None
+
+
+class IndexRebuildOut(ProductModel):
+    id: str
+    source_version_id: str
+    status: str
+    attempts: int
+    error_code: str | None = None
 
 
 class MemoryWrite(BaseModel):

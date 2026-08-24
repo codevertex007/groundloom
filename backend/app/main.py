@@ -18,6 +18,7 @@ from .models import (
     DeletionRequest,
     ExportJob,
     IdempotencyRecord,
+    IndexRebuildJob,
     OutlineVersion,
     Patch,
     Project,
@@ -35,6 +36,7 @@ from .schemas import (
     ExportCreate,
     ExportOut,
     HealthResponse,
+    IndexRebuildOut,
     MemoryWrite,
     MessageCreate,
     PatchCreate,
@@ -71,6 +73,7 @@ from .services import (
     reconcile_delegated_tasks,
     reject_patch,
     remember_idempotency,
+    request_index_rebuild,
     request_project_deletion,
     retry_delegated_task,
     search_evidence,
@@ -479,6 +482,29 @@ def register_routes(app: FastAPI) -> FastAPI:
     ):
         return read_passage(db, ctx, version_id, passage_id)
 
+    @app.post(
+        "/v1/source-versions/{version_id}/index-rebuilds",
+        response_model=IndexRebuildOut,
+        status_code=202,
+    )
+    def source_index_rebuild(
+        version_id: str,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+    ):
+        return index_rebuild_dto(request_index_rebuild(db, ctx, version_id))
+
+    @app.get("/v1/index-rebuilds/{job_id}", response_model=IndexRebuildOut)
+    def index_rebuild_get(
+        job_id: str,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+    ):
+        job = db.query(IndexRebuildJob).filter_by(id=job_id, workspace_id=ctx.workspace_id).first()
+        if not job:
+            raise GroundloomError("RESOURCE_NOT_FOUND", "The index rebuild was not found.", 404)
+        return index_rebuild_dto(job)
+
     @app.get("/v1/projects/{project_id}/sources/search", response_model=EvidenceBundle)
     def source_search(
         project_id: str,
@@ -791,6 +817,7 @@ def export_dto(job: ExportJob, request: Request) -> dict:
         if job.status == "completed"
         else None,
         "expires_at": job.expires_at,
+        "error_code": job.error_code,
     }
 
 
@@ -804,6 +831,16 @@ def deletion_dto(deletion: DeletionRequest) -> dict:
         "step_status": deletion.step_status,
         "error_code": deletion.error_code,
         "completed_at": deletion.completed_at,
+    }
+
+
+def index_rebuild_dto(job: IndexRebuildJob) -> dict:
+    return {
+        "id": job.id,
+        "source_version_id": job.source_version_id,
+        "status": job.status,
+        "attempts": job.attempts,
+        "error_code": job.error_code,
     }
 
 

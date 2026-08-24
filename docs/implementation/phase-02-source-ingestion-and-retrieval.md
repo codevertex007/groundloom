@@ -5,11 +5,11 @@
 - [x] `IMPL-02-001` Upload/finalization, immutable source/version records, scoped object keys, type/size checks.
 - [x] `IMPL-02-002` Durable leased ingestion job and idempotent stage state machine; local API and `ingestion_worker.py --once` use the same processor.
 - [x] `IMPL-02-003` PDF/DOCX/TXT/Markdown parsers and normalized page/block/chunk schema; OCR remains an adapter extension.
-- [x] `IMPL-02-004` Versioned deterministic chunking/indexing; embedding/rebuild worker remains open.
+- [x] `IMPL-02-004` Versioned deterministic chunking/indexing with an explicit scoped, idempotent lexical index-rebuild job and worker; vector embedding remains an external adapter extension.
 - [x] `IMPL-02-005` Authorized bounded lexical evidence search with selected-version filtering.
 - [x] `IMPL-02-006` Passage read/navigation APIs and citation-lineage primitives.
 - [x] `IMPL-02-007` Prompt-injection/sanitization signals and adversarial source fixture coverage.
 - [x] `IMPL-02-008` Local replay/failure and security fixtures; production-scale golden retrieval/load/deletion exercise remains a release gate.
 
 ## Exit gate
-A source can reach ready state, be searched only in authorized selected versions, navigate exact lineage, rebuild derived indexes, and recover safely from every stage failure.
+A source can reach ready state, be searched only in authorized selected versions, navigate exact lineage, rebuild derived indexes through the queued worker, and recover safely from every stage failure. External vector embedding/re-ranking remains deployment-specific.

@@ -1,6 +1,8 @@
 /** @typedef {{method?: string, headers?: Record<string, string>, body?: BodyInit}} RequestOptions */
 
 const API = import.meta.env?.VITE_API_URL || "http://127.0.0.1:8000";
+const EXPORT_POLL_INTERVAL_MS = 500;
+const EXPORT_POLL_ATTEMPTS = 30;
 
 /** @param {RequestOptions} options */
 function requestHeaders(options) {
@@ -11,6 +13,25 @@ function requestHeaders(options) {
     "X-Correlation-ID": globalThis.crypto?.randomUUID?.() || "local-correlation",
     ...(options.headers || {}),
   };
+}
+
+async function waitForExport(job) {
+  if (!["queued", "rendering", "storing"].includes(job.status)) return job;
+  for (let attempt = 0; attempt < EXPORT_POLL_ATTEMPTS; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, EXPORT_POLL_INTERVAL_MS));
+    const current = await api(`/v1/exports/${job.id}`);
+    if (current.status === "completed") return current;
+    if (["failed", "cancelled", "expired"].includes(current.status)) {
+      const error = new Error("The export could not be completed.");
+      error.code = current.error_code || "EXPORT_FAILED";
+      error.retryable = current.status === "failed";
+      throw error;
+    }
+  }
+  const error = new Error("The export is still processing. Retry status shortly.");
+  error.code = "EXPORT_PENDING";
+  error.retryable = true;
+  throw error;
 }
 
 /** @template T @param {string} path @param {RequestOptions} [options] @returns {Promise<T>} */
@@ -25,6 +46,9 @@ export async function api(path, options = {}) {
     error.code = data.code;
     error.retryable = Boolean(data.retryable);
     throw error;
+  }
+  if (path === "/v1/exports" && options.method === "POST") {
+    return /** @type {T} */ (await waitForExport(data));
   }
   return /** @type {T} */ (data);
 }

@@ -45,6 +45,8 @@ def test_openapi_contains_contract_boundary(tmp_path):
     assert "/v1/delegated-tasks/{task_id}/retry" in schema["paths"]
     assert "/v1/projects/{project_id}/deletion" in schema["paths"]
     assert "/v1/deletions/{deletion_id}" in schema["paths"]
+    assert "/v1/source-versions/{version_id}/index-rebuilds" in schema["paths"]
+    assert "/v1/index-rebuilds/{job_id}" in schema["paths"]
     json.dumps(schema)
 
 

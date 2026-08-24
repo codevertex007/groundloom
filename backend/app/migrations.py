@@ -8,6 +8,7 @@ from .db import Base, make_engine
 MIGRATION_ID = "001_initial_domain_schema"
 ADAPTERS_MIGRATION_ID = "002_ingestion_jobs_and_provider_adapters"
 RETENTION_EXPORT_MIGRATION_ID = "003_retention_deletion_and_export_leases"
+INDEX_REBUILD_MIGRATION_ID = "004_index_rebuild_jobs"
 
 
 def apply_migrations(database_url: str) -> None:
@@ -25,6 +26,7 @@ def apply_migrations(database_url: str) -> None:
             MIGRATION_ID,
             ADAPTERS_MIGRATION_ID,
             RETENTION_EXPORT_MIGRATION_ID,
+            INDEX_REBUILD_MIGRATION_ID,
         ]
         # create_all creates new tables but does not add columns to a prior
         # release. These additive columns are the only compatibility change in

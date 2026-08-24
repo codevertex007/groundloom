@@ -10,6 +10,8 @@ tests.
 
 The export worker can be run with python backend/scripts/export_worker.py and
 the retention worker with python backend/scripts/retention_worker.py. The
+derived lexical index worker can be run with python
+backend/scripts/index_worker.py.
 development adapter renders exports inline by default; set
 GROUNDLOOM_EXPORT_INLINE_LOCAL=false to exercise the durable export worker.
 
