@@ -14,6 +14,7 @@ class Settings(BaseSettings):
 
     env: Literal["development", "test", "staging", "production"] = "development"
     database_url: str = "sqlite:///./backend/data/groundloom.db"
+    worker_database_url: str | None = None
     checkpoint_backend: str = "local"
     object_store_path: Path = Path("./backend/data/objects")
     object_store_backend: str = "local"
@@ -76,6 +77,14 @@ class Settings(BaseSettings):
                 raise RuntimeError("Production requires an object storage bucket")
             if self.checkpoint_backend != "postgres":
                 raise RuntimeError("Production requires the Postgres checkpoint backend")
+            if not self.worker_database_url:
+                raise RuntimeError("Production requires a separate worker database URL")
+            worker_user = urlparse(self.worker_database_url).username
+            api_user = urlparse(self.database_url).username
+            if worker_user != "groundloom_worker":
+                raise RuntimeError("The worker database URL must use the groundloom_worker role")
+            if api_user == "groundloom_worker":
+                raise RuntimeError("The API database URL cannot use the worker database role")
             if self.export_inline_local is True:
                 raise RuntimeError("Production requires exports to run through the durable worker")
             if self.agent_inline_local:
@@ -103,6 +112,11 @@ class Settings(BaseSettings):
         safe = {
             "env": self.env,
             "database_backend": self.database_url.split(":", 1)[0],
+            "worker_database_backend": (
+                self.worker_database_url.split(":", 1)[0]
+                if self.worker_database_url
+                else None
+            ),
             "checkpoint_backend": self.checkpoint_backend,
             "object_store_backend": self.object_store_backend,
             "object_store_connect_timeout_seconds": self.object_store_connect_timeout_seconds,

@@ -17,6 +17,7 @@ WORKER_HEARTBEAT_MIGRATION_ID = "009_worker_heartbeats"
 BUDGET_CONTROLS_MIGRATION_ID = "010_budget_controls"
 POSTGRES_RLS_MIGRATION_ID = "011_postgres_rls_tenant_isolation"
 ACTIVE_AGENT_TURN_MIGRATION_ID = "012_active_agent_turn_uniqueness"
+WORKER_ROLE_RLS_MIGRATION_ID = "013_worker_role_rls_boundary"
 
 _RLS_WORKSPACE_TABLES = (
     "workspace_preferences",
@@ -65,8 +66,8 @@ def _apply_postgres_rls(connection) -> None:
         )
         connection.exec_driver_sql(
             f"CREATE POLICY groundloom_workspace_isolation ON {table} "
-            f"USING ((current_setting('app.service_role', true) = 'worker') OR ({predicate})) "
-            f"WITH CHECK ((current_setting('app.service_role', true) = 'worker') OR ({predicate}))"
+            f"USING ((current_user = 'groundloom_worker') OR ({predicate})) "
+            f"WITH CHECK ((current_user = 'groundloom_worker') OR ({predicate}))"
         )
 
 
@@ -94,6 +95,7 @@ def apply_migrations(database_url: str) -> None:
             BUDGET_CONTROLS_MIGRATION_ID,
             POSTGRES_RLS_MIGRATION_ID,
             ACTIVE_AGENT_TURN_MIGRATION_ID,
+            WORKER_ROLE_RLS_MIGRATION_ID,
         ]
         preference_columns = {
             column["name"] for column in inspect(engine).get_columns("workspace_preferences")

@@ -38,7 +38,7 @@ def test_postgres_rls_migration_generates_forced_workspace_policies():
     ]
     assert len(create_policies) == len(_RLS_WORKSPACE_TABLES)
     assert all("current_setting('app.workspace_id', true)" in statement for statement in create_policies)
-    assert all("current_setting('app.service_role', true) = 'worker'" in statement for statement in create_policies)
+    assert all("current_user = 'groundloom_worker'" in statement for statement in create_policies)
 
 
 def test_signed_identity_controls_workspace_context(tmp_path):

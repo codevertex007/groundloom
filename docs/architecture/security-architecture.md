@@ -7,7 +7,7 @@ Cross-tenant access, malicious uploads, prompt injection, tool abuse, data exfil
 ## Controls
 
 - Authenticate at the API; derive trusted runtime identity and workspace membership.
-- On PostgreSQL, force row-level policies over workspace-owned tables using a transaction-local trusted workspace setting; leased workers use a distinct service context for bounded queue claims.
+- On PostgreSQL, force row-level policies over workspace-owned tables using a transaction-local trusted workspace setting; leased workers use a distinct `groundloom_worker` database role for bounded queue claims, while the service context marker remains metadata only.
 - Authorize in routes and every service/tool/repository boundary; default deny.
 - Scope retrieval, skills, memory, files, checkpoints, artifacts, and traces by trusted context.
 - Treat documents, user content, and model output as untrusted data.
