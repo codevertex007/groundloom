@@ -42,6 +42,9 @@ class LocalTelemetry:
             self.records.pop(0)
         self.records.append({"event": event, "attributes": redact(attributes)})
 
+    def record_evaluation(self, report: dict[str, Any]) -> None:
+        self.emit("evaluation.completed", report)
+
 
 class LangfuseTelemetry:
     def __init__(self, public_key: str | None, secret_key: str | None, host: str | None):
@@ -64,6 +67,18 @@ class LangfuseTelemetry:
 
     def flush(self) -> None:
         self.client.flush()
+
+    def record_evaluation(self, report: dict[str, Any]) -> None:
+        self.client.create_event(name="evaluation.completed", metadata=redact(report))
+
+
+def record_evaluation(telemetry: Any, report: dict[str, Any]) -> None:
+    """Send a redacted evaluation observation through the configured adapter."""
+    recorder = getattr(telemetry, "record_evaluation", None)
+    if recorder is None:
+        telemetry.emit("evaluation.completed", report)
+    else:
+        recorder(report)
 
 
 def build_telemetry(provider: str, public_key: str | None = None, secret_key: str | None = None, host: str | None = None):

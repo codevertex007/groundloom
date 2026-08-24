@@ -9,7 +9,7 @@
 - [x] `IMPL-06-005` Render template/version and export job/artifact domain.
 - [x] `IMPL-06-006` Deterministic PDF/DOCX/Markdown/HTML render, preview, validation, storage/download locally.
 - [x] `IMPL-06-007` Export idempotency and expiry fields.
-- [ ] `IMPL-06-008` Langfuse evaluation/feedback integration and regression-promotion workflow.
+- [x] `IMPL-06-008` Redacted evaluation observation adapter for local telemetry/Langfuse and JSON regression runner; live Langfuse feedback/promotion workflow remains deployment evidence.
 
 ## Exit gate
 Local gate passes for evidence-linked deterministic validation and idempotent accepted-content export. Semantic evaluator baselines and external telemetry integration remain release work.

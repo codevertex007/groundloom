@@ -39,6 +39,7 @@ from .schemas import (
     ProjectDetail,
     ProjectOut,
     RunOut,
+    SkillAuthorDraftCreate,
     SkillCreate,
     SkillVersionOut,
     SourceOut,
@@ -48,6 +49,7 @@ from .schemas import (
 from .services import (
     accept_outline,
     accept_patch,
+    author_skill_draft,
     content_blocks,
     create_patch,
     create_project,
@@ -62,8 +64,10 @@ from .services import (
     publish_skill,
     read_memory,
     read_passage,
+    reconcile_delegated_tasks,
     reject_patch,
     remember_idempotency,
+    retry_delegated_task,
     search_evidence,
     seed_local,
     start_run,
@@ -358,6 +362,31 @@ def register_routes(app: FastAPI) -> FastAPI:
             db.commit()
         return run
 
+    @app.post("/v1/delegated-tasks/{task_id}/retry")
+    def delegated_task_retry(
+        task_id: str,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+    ):
+        task = retry_delegated_task(db, ctx, task_id)
+        return {
+            "id": task.id,
+            "project_id": task.project_id,
+            "parent_run_id": task.parent_run_id,
+            "task_type": task.task_type,
+            "status": task.status,
+            "attempts": task.result_refs.get("attempts", 0),
+            "error_code": task.error_code,
+        }
+
+    @app.post("/v1/runs/{run_id}/delegated-tasks/reconcile")
+    def delegated_tasks_reconcile(
+        run_id: str,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+    ):
+        return reconcile_delegated_tasks(db, ctx, run_id)
+
     @app.post("/v1/runs/{run_id}/resume", response_model=RunOut, status_code=202)
     def run_resume(
         run_id: str,
@@ -472,6 +501,29 @@ def register_routes(app: FastAPI) -> FastAPI:
         body: SkillCreate, db: Session = Depends(get_db), ctx: RuntimeContext = Depends(get_ctx)
     ):
         version = create_skill(db, ctx, body)
+        skill = db.get(Skill, version.skill_id)
+        if skill is None:
+            raise GroundloomError("INTERNAL_ERROR", "The skill identity is missing.", 500)
+        return {
+            "id": version.id,
+            "skill_id": version.skill_id,
+            "version_no": version.version_no,
+            "status": version.status,
+            "name": skill.name,
+            "slug": skill.slug,
+            "description": version.description,
+            "content_hash": version.content_hash,
+            "scope": skill.scope,
+        }
+
+    @app.post("/v1/skills/ai-drafts", response_model=SkillVersionOut, status_code=201)
+    def skill_ai_draft(
+        body: SkillAuthorDraftCreate,
+        request: Request,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+    ):
+        version = author_skill_draft(db, ctx, body, request.app.state.settings)
         skill = db.get(Skill, version.skill_id)
         if skill is None:
             raise GroundloomError("INTERNAL_ERROR", "The skill identity is missing.", 500)

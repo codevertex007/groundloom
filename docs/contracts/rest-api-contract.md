@@ -12,6 +12,7 @@ POST     /runs/{id}/cancel                POST /runs/{id}/resume
 POST     /sources/uploads                 GET /sources/{id}
 GET      /source-versions/{id}/passages/{passage_id}
 POST     /skills                          POST /skills/ai-drafts
+POST     /delegated-tasks/{id}/retry      POST /runs/{id}/delegated-tasks/reconcile
 POST     /skill-versions/{id}/validate    POST /skill-versions/{id}/publish
 POST     /patches/{id}/accept             POST /patches/{id}/reject
 POST     /exports                         GET /exports/{id}

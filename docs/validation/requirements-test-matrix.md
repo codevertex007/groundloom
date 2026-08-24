@@ -25,5 +25,7 @@ This is the initial planned matrix. Codex must replace planned identifiers with 
 | `API-*`, `EVT-*` | OpenAPI/SSE schema, compatibility, replay tests, and `test_project_source_grounded_run_and_replay` stream assertion |
 | `EVAL-*` | `backend/tests/test_evaluation.py::test_deterministic_rubric_requires_terms_and_citations`; `backend/scripts/run_evals.py` JSON baseline |
 | `PERF-LOCAL-*` | `backend/scripts/benchmark_local.py --requests 20`; synthetic SQLite/filesystem retrieval p50/p95 report |
+| `SUBAGENT-*` | `backend/tests/test_delegation_recovery.py::test_partial_delegation_retry_is_bounded_and_reconciled`; retry/reconciliation REST contracts |
+| `SKILL-AUTHOR-*` | `backend/tests/test_delegation_recovery.py::test_skill_author_endpoint_creates_draft_only_and_provider_failure_is_explicit`; `/v1/skills/ai-drafts` |
 
 Release blocks on any active requirement without proof or explicitly approved manual verification.

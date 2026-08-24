@@ -5,14 +5,14 @@ sign-off. It was refreshed on 2026-08-25 from the repository root.
 
 | Gate | Command/evidence | Result |
 |---|---|---|
-| Backend unit/contract/security | `python -m pytest -q` | 22 passed |
+| Backend unit/contract/security | `python -m pytest -q` | 26 passed |
 | Python lint | `python -m ruff check backend/app backend/tests backend/scripts` | Passed |
 | Python types | `python -m mypy backend/app` | Passed; 20 source files |
 | Documentation/traceability | `python backend/scripts/validate_docs.py` | Passed; 165 markdown documents |
 | Frontend build | `cd frontend; npm run build` | Passed |
 | Frontend dependency audit | `cd frontend; npm audit --omit=dev` | 0 vulnerabilities |
 | Python environment audit | `python -m pip check` | Existing environment conflict: `streamlit 1.43.1` requires `protobuf<6`, installed environment has `protobuf 6.31.1`; unrelated to Groundloom's declared dependencies and should be resolved in a clean release environment. |
-| Deterministic evaluation | `python backend/scripts/run_evals.py` | 1 pass / 1 intentional needs-revision regression case |
+| Deterministic evaluation | `python backend/scripts/run_evals.py` | 1 pass / 1 intentional needs-revision regression case; redacted `evaluation.completed` observation emitted |
 | Retrieval envelope | `python backend/scripts/benchmark_local.py --requests 20` | Synthetic SQLite/filesystem p50/p95 emitted; not a production SLO |
 | Migration | `python backend/scripts/migrate.py` and migration status query | `001_initial_domain_schema`, `002_ingestion_jobs_and_provider_adapters` |
 | Browser journey | Existing browser smoke evidence | Create → source-grounded draft → review → accept passed |

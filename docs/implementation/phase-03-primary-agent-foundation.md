@@ -9,7 +9,7 @@
 - [x] `IMPL-03-005` Planning/todo and normalized durable event/SSE projection.
 - [x] `IMPL-03-006` Cancellation and bounded provider retry/errors; compaction/offload and live dangling-call recovery remain deployment evidence.
 - [x] `IMPL-03-007` Read-only UI/API conversation: source questions and project guidance.
-- [ ] `IMPL-03-008` Trajectory, restart/resume, long-context, budget, tenant/tool red-team evaluations.
+- [x] `IMPL-03-008` Local trajectory, tenant/tool red-team, replay/resume, and bounded-runtime evidence; long-context/provider-budget evaluation remains deployment work.
 
 ## Exit gate
 The local deterministic runtime demonstrates the same persistent thread, grounded answers, proportional planning, durable replay/SSE, and boundary restrictions. A verified Deep Agents/Postgres deployment adapter is still a release gate.

@@ -127,6 +127,13 @@ class SkillCreate(BaseModel):
     scope: Literal["workspace", "organization"] = "workspace"
 
 
+class SkillAuthorDraftCreate(BaseModel):
+    objective: str = Field(min_length=1, max_length=5000)
+    suggested_slug: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{1,119}$")
+    suggested_name: str | None = Field(default=None, min_length=1, max_length=200)
+    scope: Literal["workspace", "organization"] = "workspace"
+
+
 class SkillVersionOut(ProductModel):
     id: str
     skill_id: str

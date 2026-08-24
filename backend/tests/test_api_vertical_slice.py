@@ -82,6 +82,26 @@ def test_project_create_is_idempotent(tmp_path):
     assert first.json()["id"] == second.json()["id"]
 
 
+def test_local_agent_trajectory_skips_delegation_for_initialization(tmp_path):
+    api = client(tmp_path)
+    project = api.post(
+        "/v1/projects",
+        headers=headers(),
+        json={"name": "Trajectory", "project_type": "brief", "brief": "A trajectory"},
+    ).json()
+    run = api.post(
+        f"/v1/projects/{project['id']}/threads/messages",
+        headers=headers(**{"Idempotency-Key": "trajectory-initialize"}),
+        json={"text": "initialize"},
+    )
+    assert run.status_code == 202
+    detail = api.get(f"/v1/projects/{project['id']}", headers=headers()).json()
+    events = api.get(f"/v1/threads/{detail['thread_id']}/events", headers=headers()).json()
+    event_types = [event["type"] for event in events]
+    assert "run.completed" in event_types
+    assert "subagent.completed" not in event_types
+
+
 def test_source_revision_is_immutable_and_keeps_lineage(tmp_path):
     api = client(tmp_path)
     first = base64.b64encode(b"First approved guidance.").decode()

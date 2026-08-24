@@ -3,6 +3,7 @@
 import json
 
 from app.evaluation import DeterministicSemanticGrader, RubricVersion, run_evaluation_cases
+from app.telemetry import LocalTelemetry, record_evaluation
 
 if __name__ == "__main__":
     rubric = RubricVersion("local-grounding-v1", required_terms=("evidence", "source"))
@@ -14,4 +15,7 @@ if __name__ == "__main__":
         rubric,
         DeterministicSemanticGrader(),
     )
+    telemetry = LocalTelemetry()
+    record_evaluation(telemetry, report)
+    report["telemetry_event"] = telemetry.records[-1]["event"]
     print(json.dumps(report, indent=2))
