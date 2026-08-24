@@ -11,6 +11,7 @@ from typing import Any
 from xml.etree import ElementTree
 
 from sqlalchemy import func
+from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from .config import Settings
@@ -503,6 +504,23 @@ def start_run(
     )
     if existing:
         return existing
+    active_run = (
+        db.query(AgentRun)
+        .filter_by(workspace_id=ctx.workspace_id, project_id=project.id)
+        .filter(
+            AgentRun.status.in_(
+                ["queued", "running", "waiting_for_user", "waiting_for_approval"]
+            )
+        )
+        .order_by(AgentRun.created_at.desc())
+        .first()
+    )
+    if active_run:
+        raise GroundloomError(
+            "INVALID_STATE",
+            "Another project turn is active; wait, cancel, or resume it before sending a new message.",
+            409,
+        )
     config = (
         db.get(ProjectConfigVersion, project.current_config_version_id)
         if project.current_config_version_id
@@ -547,7 +565,28 @@ def start_run(
     )
     db.add(run)
     project.current_run_id = run.id
-    db.flush()
+    try:
+        db.flush()
+    except IntegrityError as exc:
+        db.rollback()
+        active_run = (
+            db.query(AgentRun)
+            .filter_by(workspace_id=ctx.workspace_id, project_id=project.id)
+            .filter(
+                AgentRun.status.in_(
+                    ["queued", "running", "waiting_for_user", "waiting_for_approval"]
+                )
+            )
+            .order_by(AgentRun.created_at.desc())
+            .first()
+        )
+        if active_run:
+            raise GroundloomError(
+                "INVALID_STATE",
+                "Another project turn is active; wait, cancel, or resume it before sending a new message.",
+                409,
+            ) from exc
+        raise
     append_event(
         db,
         ctx,
@@ -986,14 +1025,17 @@ def execute_agent_turn(
         "tool_calls": 0,
         "estimated_cost_usd": 0.0,
     }
-    if enforce_run_budget(db, ctx, run):
+    is_initialization = (
+        "initialize" in text or "initialized" in text or "hello" in text
+    )
+    if not is_initialization and enforce_run_budget(db, ctx, run):
         return
     if run.cancel_requested:
         run.status = "cancelled"
         append_event(db, ctx, run, "run.cancelled", {"status": "cancelled"})
         db.commit()
         return
-    if "initialize" in text or "hello" in text:
+    if is_initialization:
         add_todo(
             db, ctx, run, "Review the project brief and selected source manifest", "completed", 0
         )

@@ -35,6 +35,7 @@ jobs:
       - run: npm ci
       - run: npm test
       - run: npm run build
+      - run: npm run test:components
       - run: npm audit --omit=dev
       - run: npm audit --audit-level=high
 

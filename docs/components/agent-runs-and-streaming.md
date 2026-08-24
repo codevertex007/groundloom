@@ -5,3 +5,18 @@ Owns agent threads, runs, durable public events, run steps/projections, todos, a
 Commands: create/send message, cancel, resume/approve, retry eligible failed scope. Queries: thread transcript view, run status, event replay, todos/steps. Persist public events with monotonically increasing per-run sequence through outbox; SSE may reconnect from last sequence.
 
 Required tests: double submit, serialization policy, replay dedupe/order, API/worker restart, cancellation timing, approval expiry/resume, dangling tool call recovery, redaction, event schema compatibility, and no checkpoint leakage in DTOs.
+
+Groundloom serializes one active mutation turn per project. A duplicate request
+with the same idempotency key replays its existing run; a different request
+while the project has a queued, running, or waiting run receives typed
+`INVALID_STATE`/409 guidance to wait, cancel, or resume. This prevents two
+primary-thread mutations from racing silently.
+Migration `012_active_agent_turn_uniqueness` backs the check with a partial
+unique index over active run states so concurrent API requests cannot create
+two active turns after both application checks pass.
+
+The deterministic local initialization turn is treated as thread setup rather
+than optional agent work: it does not consume the project’s optional work
+budget, so a newly created project with a deliberately small budget can still
+accept its first user turn. Normal user turns remain subject to per-run and
+workspace budget enforcement.

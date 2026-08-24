@@ -256,6 +256,9 @@ def test_agent_worker_claims_queued_runs_and_preserves_inline_local_mode(tmp_pat
     )
     assert project.status_code == 201
     project_id = project.json()["id"]
+    with app.state.session_factory() as db:
+        result = run_agent_worker_once(db, settings, "agent-test-worker", limit=10)
+        assert result == {"claimed": 1, "completed": 1, "requeued": 0, "failed": 0}
     message = api.post(
         f"/v1/projects/{project_id}/threads/messages",
         headers=headers,
@@ -264,5 +267,5 @@ def test_agent_worker_claims_queued_runs_and_preserves_inline_local_mode(tmp_pat
     assert message.status_code == 202 and message.json()["status"] == "queued"
     with app.state.session_factory() as db:
         result = run_agent_worker_once(db, settings, "agent-test-worker", limit=10)
-        assert result == {"claimed": 2, "completed": 2, "requeued": 0, "failed": 0}
+        assert result == {"claimed": 1, "completed": 1, "requeued": 0, "failed": 0}
         assert all(run.status == "completed" for run in db.query(AgentRun).all())

@@ -24,6 +24,11 @@ GET/PUT  /workspace/preferences
 
 Use 400 invalid request, 401 unauthenticated, 403 authorized identity lacking action without existence leak, 404 accessible resource absent, 409 version/state/idempotency conflict, 422 domain validation, 429 budget/rate, 503 transient dependency. Error body follows `error-taxonomy.md`.
 
+The project message command serializes active mutation turns with a partial
+unique database index. A different message while a run is queued, running, or
+waiting returns `409 INVALID_STATE`; the same idempotency key replays the
+existing run.
+
 Before implementation, generate an OpenAPI document and contract tests for every operation, auth case, error, pagination, idempotency, and example. The OpenAPI is generated/validated from code but reviewed against this specification.
 
 Export creation is idempotent and returns queued in staging/production;

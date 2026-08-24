@@ -827,6 +827,11 @@ For the primary project thread, allow one active mutation turn at a time. If ano
 - mutation requests either queue or explicitly cancel/replace the current run;
 - the UI displays the policy rather than silently racing two patches.
 
+The application enforces this policy at `start_run`: same-key requests replay
+the existing run, while a different request against a queued, running, or
+waiting run receives a typed 409 response instructing the user to wait, cancel,
+or resume the active turn.
+
 The primary agent can run module subagents concurrently because their ownership boundaries are explicit. The parent remains responsible for reconciling results, updating todos, invoking deterministic validators, and deciding whether another iteration is useful.
 
 ---

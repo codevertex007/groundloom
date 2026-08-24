@@ -73,6 +73,7 @@ python -m ruff check backend/app backend/tests
 python -m mypy backend/app --ignore-missing-imports
 python backend/scripts/validate_docs.py
 cd frontend; npm run build
+cd frontend; npm run test:components
 cd ..
 python backend/scripts/run_evals.py
 

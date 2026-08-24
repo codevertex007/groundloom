@@ -152,13 +152,16 @@ def test_queued_run_can_be_cancelled_and_replayed_without_resuming(tmp_path):
         headers=auth_headers,
         json={"name": "Cancellable run", "project_type": "brief", "brief": "Cancel safely"},
     ).json()
-    queued = api.post(
+    run_id = project["current_run_id"]
+    queued = api.get(f"/v1/runs/{run_id}", headers=auth_headers)
+    assert queued.status_code == 200 and queued.json()["status"] == "queued"
+    concurrent = api.post(
         f"/v1/projects/{project['id']}/threads/messages",
-        headers={**auth_headers, "Idempotency-Key": "cancel-run-1"},
-        json={"text": "Queue this draft"},
+        headers={**auth_headers, "Idempotency-Key": "cancel-run-2"},
+        json={"text": "Race this draft"},
     )
-    assert queued.status_code == 202 and queued.json()["status"] == "queued"
-    run_id = queued.json()["id"]
+    assert concurrent.status_code == 409
+    assert concurrent.json()["code"] == "INVALID_STATE"
     cancelled = api.post(f"/v1/runs/{run_id}/cancel", headers=auth_headers)
     assert cancelled.status_code == 200 and cancelled.json()["status"] == "cancelled"
     replay = api.post(f"/v1/runs/{run_id}/cancel", headers=auth_headers)

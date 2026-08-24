@@ -8,6 +8,7 @@
     "build": "vite build",
     "preview": "vite preview",
     "test": "node --test src/api.test.js src/ui-contract.test.js",
+    "test:components": "vitest run src/components.test.jsx",
     "test:e2e": "playwright test"
   },
   "dependencies": {
@@ -19,6 +20,7 @@
     "@axe-core/playwright": "^4.13.0",
     "@playwright/test": "^1.57.0",
     "@vitejs/plugin-react": "^4.3.4",
-    "vite": "^6.4.3"
+    "vite": "^6.4.3",
+    "vitest": "^3.2.6"
   }
 }

@@ -3,6 +3,11 @@ import { readFile } from "node:fs/promises";
 import test from "node:test";
 
 const source = await readFile(new URL("./main.jsx", import.meta.url), "utf8");
+const components = await readFile(
+  new URL("./components.jsx", import.meta.url),
+  "utf8",
+);
+const uiSource = `${source}\n${components}`;
 
 test("reference surfaces and connected mutations are present in the UI", () => {
   for (const surface of [
@@ -16,7 +21,7 @@ test("reference surfaces and connected mutations are present in the UI", () => {
     "CommandPalette",
     "NewProjectModal",
   ]) {
-    assert.match(source, new RegExp(`function ${surface}\\b`));
+    assert.match(uiSource, new RegExp(`function ${surface}\\b`));
   }
   for (const contract of [
     "/v1/projects",

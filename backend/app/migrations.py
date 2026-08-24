@@ -16,6 +16,7 @@ AGENT_RUN_WORKER_MIGRATION_ID = "008_agent_run_workers"
 WORKER_HEARTBEAT_MIGRATION_ID = "009_worker_heartbeats"
 BUDGET_CONTROLS_MIGRATION_ID = "010_budget_controls"
 POSTGRES_RLS_MIGRATION_ID = "011_postgres_rls_tenant_isolation"
+ACTIVE_AGENT_TURN_MIGRATION_ID = "012_active_agent_turn_uniqueness"
 
 _RLS_WORKSPACE_TABLES = (
     "workspace_preferences",
@@ -92,6 +93,7 @@ def apply_migrations(database_url: str) -> None:
             WORKER_HEARTBEAT_MIGRATION_ID,
             BUDGET_CONTROLS_MIGRATION_ID,
             POSTGRES_RLS_MIGRATION_ID,
+            ACTIVE_AGENT_TURN_MIGRATION_ID,
         ]
         preference_columns = {
             column["name"] for column in inspect(engine).get_columns("workspace_preferences")
@@ -165,6 +167,13 @@ def apply_migrations(database_url: str) -> None:
                 )
         if engine.dialect.name == "postgresql":
             _apply_postgres_rls(connection)
+        connection.execute(
+            text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_agent_runs_one_active_per_project "
+                "ON agent_runs (project_id) "
+                "WHERE status IN ('queued', 'running', 'waiting_for_user', 'waiting_for_approval')"
+            )
+        )
     engine.dispose(close=True)
 
 
