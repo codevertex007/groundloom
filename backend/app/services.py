@@ -20,6 +20,7 @@ from .ids import new_id
 from .models import (
     AgentRun,
     AgentThread,
+    ApprovalRequest,
     AuditEvent,
     ContentBlock,
     ContentVersion,
@@ -449,6 +450,10 @@ def start_run(
             "retrieval_version": "lexical.v1",
             "evaluator_version": "deterministic.v1",
         },
+        budget_json={
+            "max_estimated_tokens": int((config.defaults_json if config else {}).get("max_estimated_tokens", 12000)),
+            "max_tool_calls": int((config.defaults_json if config else {}).get("max_tool_calls", 40)),
+        },
     )
     db.add(run)
     project.current_run_id = run.id
@@ -460,6 +465,97 @@ def start_run(
     if completed is None:
         raise GroundloomError("INTERNAL_ERROR", "The run disappeared before completion.", 500)
     return completed
+
+
+def approval_dto(approval: ApprovalRequest) -> dict[str, Any]:
+    return {
+        "id": approval.id,
+        "project_id": approval.project_id,
+        "thread_id": approval.thread_id,
+        "run_id": approval.run_id,
+        "kind": approval.kind,
+        "status": approval.status,
+        "payload": approval.payload_json,
+        "decision_reason": approval.decision_reason,
+        "decided_by": approval.decided_by,
+        "decided_at": approval.decided_at,
+    }
+
+
+def list_run_approvals(db: Session, ctx: RuntimeContext, run_id: str) -> list[dict[str, Any]]:
+    ctx.require(
+        "view run approvals",
+        {"viewer", "author", "reviewer", "workspace_admin", "organization_admin"},
+    )
+    return [
+        approval_dto(item)
+        for item in db.query(ApprovalRequest)
+        .filter_by(run_id=run_id, workspace_id=ctx.workspace_id)
+        .order_by(ApprovalRequest.created_at)
+        .all()
+    ]
+
+
+def resolve_approval(
+    db: Session,
+    ctx: RuntimeContext,
+    approval_id: str,
+    decision: str,
+    reason: str | None,
+    settings: Settings,
+) -> dict[str, Any]:
+    ctx.require("resolve approval", {"author", "reviewer", "workspace_admin", "organization_admin"})
+    approval = (
+        db.query(ApprovalRequest)
+        .filter_by(id=approval_id, workspace_id=ctx.workspace_id)
+        .first()
+    )
+    if not approval:
+        raise GroundloomError("RESOURCE_NOT_FOUND", "The approval request was not found.", 404)
+    if approval.status != "pending":
+        return approval_dto(approval)
+    run = db.query(AgentRun).filter_by(id=approval.run_id, workspace_id=ctx.workspace_id).first()
+    if not run:
+        raise GroundloomError("DEPENDENCY_UNAVAILABLE", "The approval run is unavailable.", 503)
+    approval.status = decision
+    approval.decision_reason = reason
+    approval.decided_by = ctx.user_id
+    approval.decided_at = utcnow()
+    append_event(
+        db,
+        ctx,
+        run,
+        "approval.resolved",
+        {"approval_id": approval.id, "kind": approval.kind, "status": decision},
+    )
+    audit(
+        db,
+        ctx,
+        "approval.resolved",
+        "approval_request",
+        approval.id,
+        f"{decision.title()} {approval.kind} approval",
+    )
+    if decision == "approved":
+        run.pinned_config_json = {
+            **run.pinned_config_json,
+            "approved_outline_id": approval.payload_json.get("outline_version_id"),
+        }
+        run.status = "running"
+        db.commit()
+        execute_agent_turn(db, ctx, run, settings)
+    else:
+        run.status = "cancelled"
+        run.error_code = "PLAN_REJECTED"
+        append_event(
+            db,
+            ctx,
+            run,
+            "run.cancelled",
+            {"status": "cancelled", "reason": "The proposed plan was rejected."},
+        )
+        db.commit()
+    return approval_dto(approval)
 
 
 def _selected_versions(db: Session, run: AgentRun) -> list[str]:
@@ -570,6 +666,13 @@ def execute_deep_agent_turn(
     content = last.get("content", "") if isinstance(last, dict) else getattr(last, "content", "")
     if isinstance(content, list):
         content = " ".join(str(item.get("text", item)) if isinstance(item, dict) else str(item) for item in content)
+    raw_usage = result.get("usage", {}) if isinstance(result, dict) else {}
+    run.usage_json = {
+        "input_tokens": int(raw_usage.get("input_tokens", max(1, len(run.request_text) // 4))),
+        "output_tokens": int(raw_usage.get("output_tokens", max(1, len(str(content)) // 4))),
+        "tool_calls": int(raw_usage.get("tool_calls", 0)),
+        "estimated_cost_usd": float(raw_usage.get("estimated_cost_usd", 0.0)),
+    }
     append_event(
         db,
         ctx,
@@ -595,8 +698,18 @@ def execute_agent_turn(
     if settings and settings.model_provider != "local":
         execute_deep_agent_turn(db, ctx, run, settings)
         return
+    if run.pinned_config_json.get("approved_outline_id"):
+        _complete_approved_plan(db, ctx, run)
+        return
     project = _project(db, ctx, run.project_id)
     text = run.request_text.lower()
+    run.usage_json = {
+        "input_chars": len(run.request_text),
+        "estimated_input_tokens": max(1, len(run.request_text) // 4),
+        "output_tokens": 0,
+        "tool_calls": 0,
+        "estimated_cost_usd": 0.0,
+    }
     if run.cancel_requested:
         run.status = "cancelled"
         append_event(db, ctx, run, "run.cancelled", {"status": "cancelled"})
@@ -614,6 +727,7 @@ def execute_agent_turn(
             {"status": "completed", "summary": "Project collaborator is ready."},
         )
         run.status = "completed"
+        run.usage_json = {**run.usage_json, "output_tokens": 8, "estimated_cost_usd": 0.00001}
         audit(db, ctx, "run.completed", "agent_run", run.id, "Initialized primary project thread")
         db.commit()
         return
@@ -632,6 +746,7 @@ def execute_agent_turn(
             "gaps": evidence.gaps,
         },
     )
+    run.usage_json = {**run.usage_json, "tool_calls": 1}
     wants_draft = any(word in text for word in ("draft", "generate", "outline", "write", "create"))
     if not wants_draft:
         add_todo(db, ctx, run, "Answer the grounded project question", "completed", 1)
@@ -655,6 +770,7 @@ def execute_agent_turn(
             {"status": "completed", "summary": "Grounded response produced."},
         )
         run.status = "completed"
+        run.usage_json = {**run.usage_json, "output_tokens": max(1, len(answer) // 4), "estimated_cost_usd": 0.00002}
         db.commit()
         return
     add_todo(db, ctx, run, "Propose a reviewable outline", "in_progress", 1)
@@ -727,6 +843,40 @@ def execute_agent_turn(
                 "objective": task.objective,
             },
         )
+    requires_approval = bool((config.defaults_json if config else {}).get("require_plan_approval")) or (
+        "approve the plan" in text or "plan approval" in text
+    )
+    if requires_approval:
+        approval = ApprovalRequest(
+            id=new_id("approval"),
+            workspace_id=ctx.workspace_id,
+            project_id=project.id,
+            thread_id=run.thread_id,
+            run_id=run.id,
+            kind="plan",
+            status="pending",
+            payload_json={"outline_version_id": outline.id, "items": outline_items},
+        )
+        db.add(approval)
+        run.status = "waiting_for_approval"
+        add_todo(db, ctx, run, "Approve or reject the proposed outline", "waiting_for_user", 2)
+        append_event(
+            db,
+            ctx,
+            run,
+            "approval.required",
+            {"approval_id": approval.id, "kind": approval.kind, "outline_version_id": outline.id},
+        )
+        append_event(
+            db,
+            ctx,
+            run,
+            "run.waiting",
+            {"status": "waiting_for_approval", "reason": "Plan approval is required."},
+        )
+        audit(db, ctx, "approval.required", "approval_request", approval.id, "Plan approval requested")
+        db.commit()
+        return
     append_event(
         db, ctx, run, "plan.proposed", {"outline_version_id": outline.id, "items": outline_items}
     )
@@ -798,6 +948,12 @@ def execute_agent_turn(
         },
     )
     run.status = "completed"
+    run.usage_json = {
+        **run.usage_json,
+        "output_tokens": max(1, len(project.brief) // 4),
+        "tool_calls": 1,
+        "estimated_cost_usd": 0.00005,
+    }
     audit(
         db,
         ctx,
@@ -806,6 +962,48 @@ def execute_agent_turn(
         run.id,
         "Produced adaptive outline and content proposal",
     )
+    db.commit()
+
+
+def _complete_approved_plan(db: Session, ctx: RuntimeContext, run: AgentRun) -> None:
+    """Continue the same local primary-agent run after a plan approval interrupt."""
+    project = _project(db, ctx, run.project_id)
+    evidence = search_evidence(db, ctx, project.id, run.request_text, limit=8)
+    passage_dicts = [passage.model_dump() for passage in evidence.passages]
+    current = db.get(ContentVersion, project.current_content_version_id)
+    if current is None:
+        raise GroundloomError("DEPENDENCY_UNAVAILABLE", "The project has no current content version.", 503)
+    patch = Patch(
+        id=new_id("pat"),
+        workspace_id=ctx.workspace_id,
+        project_id=project.id,
+        base_content_version_id=current.id,
+        status="presented",
+        operations=[
+            {"op": "insert_after", "after_block_id": None, "payload": {"block_type": "heading", "text": project.name}},
+            {
+                "op": "insert_after",
+                "after_block_id": None,
+                "payload": {
+                    "block_type": "paragraph",
+                    "text": f"{project.brief}\n\nThis draft is grounded in {len(passage_dicts)} authorized source passage(s).",
+                    "citations": [p["passage_id"] for p in passage_dicts[:3]],
+                },
+            },
+        ],
+        summary="Approved source-grounded draft proposal",
+        validation_json={"status": "valid", "findings": []},
+        actor_id=ctx.user_id,
+    )
+    db.add(patch)
+    db.flush()
+    add_todo(db, ctx, run, "Propose cited content changes for review", "completed", 2)
+    append_event(db, ctx, run, "patch.proposed", {"patch_id": patch.id, "base_content_version_id": current.id, "operation_count": 2, "summary": patch.summary})
+    append_event(db, ctx, run, "validation.completed", {"status": "passed", "finding_count": 0, "patch_id": patch.id})
+    append_event(db, ctx, run, "run.completed", {"status": "completed", "summary": "Approved outline continued into a cited draft proposal.", "patch_id": patch.id})
+    run.status = "completed"
+    run.usage_json = {**run.usage_json, "output_tokens": max(1, len(project.brief) // 4), "tool_calls": 1, "estimated_cost_usd": 0.00005}
+    audit(db, ctx, "run.completed", "agent_run", run.id, "Resumed approved plan and produced content proposal")
     db.commit()
 
 

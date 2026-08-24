@@ -82,6 +82,52 @@ def test_project_create_is_idempotent(tmp_path):
     assert first.json()["id"] == second.json()["id"]
 
 
+def test_plan_approval_interrupt_resumes_same_run_and_thread(tmp_path):
+    api = client(tmp_path)
+    project = api.post(
+        "/v1/projects",
+        headers=headers(),
+        json={
+            "name": "Approval flow",
+            "project_type": "brief",
+            "brief": "A reviewable plan",
+            "defaults": {"require_plan_approval": True},
+        },
+    ).json()
+    run_response = api.post(
+        f"/v1/projects/{project['id']}/threads/messages",
+        headers=headers(**{"Idempotency-Key": "approval-run-1"}),
+        json={"text": "Generate a draft after plan approval"},
+    )
+    assert run_response.status_code == 202
+    run = run_response.json()
+    assert run["status"] == "waiting_for_approval"
+    assert run["budget"]["max_estimated_tokens"] == 12000
+    assert run["usage"]["tool_calls"] == 1
+    approvals = api.get(f"/v1/runs/{run['id']}/approvals", headers=headers())
+    assert approvals.status_code == 200 and len(approvals.json()) == 1
+    approval = approvals.json()[0]
+    assert approval["status"] == "pending"
+    resolved = api.post(
+        f"/v1/approvals/{approval['id']}/resolve",
+        headers=headers(),
+        json={"decision": "approved", "reason": "Plan matches the brief."},
+    )
+    assert resolved.status_code == 200 and resolved.json()["status"] == "approved"
+    resumed = api.get(f"/v1/runs/{run['id']}", headers=headers()).json()
+    assert resumed["status"] == "completed"
+    assert resumed["thread_id"] == run["thread_id"]
+    event_types = [
+        event["type"]
+        for event in api.get(
+            f"/v1/threads/{run['thread_id']}/events", headers=headers()
+        ).json()
+    ]
+    assert "approval.required" in event_types
+    assert "approval.resolved" in event_types
+    assert event_types.count("patch.proposed") == 1
+
+
 def test_local_agent_trajectory_skips_delegation_for_initialization(tmp_path):
     api = client(tmp_path)
     project = api.post(

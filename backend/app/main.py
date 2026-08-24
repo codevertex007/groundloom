@@ -27,6 +27,8 @@ from .models import (
 )
 from .object_store import build_object_store
 from .schemas import (
+    ApprovalDecision,
+    ApprovalOut,
     DecisionIn,
     DeletionRequestCreate,
     DeletionRequestOut,
@@ -65,6 +67,7 @@ from .services import (
     execute_agent_turn,
     export_content,
     get_retention_policy,
+    list_run_approvals,
     list_skills,
     list_sources,
     patch_out,
@@ -78,6 +81,7 @@ from .services import (
     remember_idempotency,
     request_index_rebuild,
     request_project_deletion,
+    resolve_approval,
     retry_delegated_task,
     search_evidence,
     seed_local,
@@ -417,6 +421,32 @@ def register_routes(app: FastAPI) -> FastAPI:
         db.commit()
         execute_agent_turn(db, ctx, run, request.app.state.settings)
         return run
+
+    @app.get("/v1/runs/{run_id}/approvals", response_model=list[ApprovalOut])
+    def run_approvals(
+        run_id: str, db: Session = Depends(get_db), ctx: RuntimeContext = Depends(get_ctx)
+    ):
+        run = db.query(AgentRun).filter_by(id=run_id, workspace_id=ctx.workspace_id).first()
+        if not run:
+            raise GroundloomError("RESOURCE_NOT_FOUND", "The run was not found.", 404)
+        return list_run_approvals(db, ctx, run_id)
+
+    @app.post("/v1/approvals/{approval_id}/resolve", response_model=ApprovalOut)
+    def approval_resolve(
+        approval_id: str,
+        body: ApprovalDecision,
+        request: Request,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+    ):
+        return resolve_approval(
+            db,
+            ctx,
+            approval_id,
+            body.decision,
+            body.reason,
+            request.app.state.settings,
+        )
 
     @app.get("/v1/sources", response_model=list[SourceOut])
     def sources_get(db: Session = Depends(get_db), ctx: RuntimeContext = Depends(get_ctx)):

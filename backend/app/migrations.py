@@ -10,6 +10,7 @@ ADAPTERS_MIGRATION_ID = "002_ingestion_jobs_and_provider_adapters"
 RETENTION_EXPORT_MIGRATION_ID = "003_retention_deletion_and_export_leases"
 INDEX_REBUILD_MIGRATION_ID = "004_index_rebuild_jobs"
 DELEGATED_WORKER_MIGRATION_ID = "005_delegated_task_leases"
+APPROVAL_USAGE_MIGRATION_ID = "006_approval_and_run_usage"
 
 
 def apply_migrations(database_url: str) -> None:
@@ -29,6 +30,7 @@ def apply_migrations(database_url: str) -> None:
             RETENTION_EXPORT_MIGRATION_ID,
             INDEX_REBUILD_MIGRATION_ID,
             DELEGATED_WORKER_MIGRATION_ID,
+            APPROVAL_USAGE_MIGRATION_ID,
         ]
         # create_all creates new tables but does not add columns to a prior
         # release. These additive columns are the only compatibility change in
@@ -56,6 +58,12 @@ def apply_migrations(database_url: str) -> None:
             if name not in delegated_columns:
                 connection.execute(
                     text(f"ALTER TABLE delegated_tasks ADD COLUMN {name} {sql_type} DEFAULT {default}")
+                )
+        run_columns = {column["name"] for column in inspect(engine).get_columns("agent_runs")}
+        for name in ("usage_json", "budget_json"):
+            if name not in run_columns:
+                connection.execute(
+                    text(f"ALTER TABLE agent_runs ADD COLUMN {name} JSON DEFAULT '{{}}'")
                 )
         for migration_id in migration_ids:
             if database_url.startswith("sqlite"):

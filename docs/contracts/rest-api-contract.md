@@ -9,6 +9,7 @@ POST/GET /projects                         GET /projects/{id}
 POST     /projects/{id}/threads/messages  GET /threads/{id}/events
 GET      /threads/{id}/events/stream      POST /sources/{id}/versions
 POST     /runs/{id}/cancel                POST /runs/{id}/resume
+GET      /runs/{id}/approvals             POST /approvals/{id}/resolve
 POST     /sources/uploads                 GET /sources/{id}
 GET      /source-versions/{id}/passages/{passage_id}
 POST     /skills                          POST /skills/ai-drafts
@@ -29,3 +30,7 @@ export_worker.py advances queued to rendering, storing, completed, or failed.
 The credential-free development adapter performs one inline worker pass unless
 GROUNDLOOM_EXPORT_INLINE_LOCAL=false. Project deletion always returns a
 durable pending request and is completed only by the retention worker.
+Plan approval is represented by a durable approval request. Resolving an
+approval emits `approval.resolved` and resumes the same run/thread; rejected
+plans terminate the run without creating a canonical content version. Runs
+also expose redacted usage and bounded budget metadata in `RunOut`.

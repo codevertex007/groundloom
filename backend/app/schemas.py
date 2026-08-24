@@ -66,7 +66,28 @@ class RunOut(ProductModel):
     status: str
     request_text: str
     error_code: str | None = None
+    usage: dict[str, Any] = Field(default_factory=dict)
+    budget: dict[str, Any] = Field(default_factory=dict)
     created_at: datetime
+
+
+class ApprovalOut(ProductModel):
+    id: str
+    project_id: str
+    thread_id: str
+    run_id: str
+    kind: str
+    status: str
+    payload: dict[str, Any]
+    decision_reason: str | None = None
+    decided_by: str | None = None
+    decided_at: datetime | None = None
+
+
+class ApprovalDecision(BaseModel):
+    decision: Literal["approved", "rejected"]
+    reason: str | None = Field(default=None, max_length=2000)
+    idempotency_key: str | None = Field(default=None, max_length=180)
 
 
 class EventOut(ProductModel):

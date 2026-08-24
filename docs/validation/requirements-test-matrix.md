@@ -7,7 +7,7 @@ This is the initial planned matrix. Codex must replace planned identifiers with 
 | `FR-PROJECT-001..003` | `backend/tests/test_api_vertical_slice.py::test_project_source_grounded_run_and_replay`; browser smoke create/reload/canvas |
 | `FR-SOURCE-001..003` | `backend/tests/test_api_vertical_slice.py::test_project_source_grounded_run_and_replay`, `::test_source_revision_is_immutable_and_keeps_lineage`; scoped retrieval service, passage lineage, and immutable revision API |
 | `FR-SKILL-001..002` | `backend/tests/test_api_vertical_slice.py::test_skill_publish_validation_and_export`; draft/validate/publish role path |
-| `FR-AGENT-001..002` | `backend/tests/test_api_vertical_slice.py::test_project_source_grounded_run_and_replay`; durable adaptive local trajectory events |
+| `FR-AGENT-001..002` | `backend/tests/test_api_vertical_slice.py::test_project_source_grounded_run_and_replay`, `::test_plan_approval_interrupt_resumes_same_run_and_thread`; durable adaptive local trajectory, approval interrupt, same-thread resume, and redacted usage/budget metadata |
 | `FR-CONTENT-001..005` | `backend/tests/test_api_vertical_slice.py::test_patch_reject_and_accept_exactly_once`; immutable content version and exact-once decision |
 | `FR-QUALITY-001` | `backend/app/services.py::validate_content`; `/v1/projects/{id}/validate` contract |
 | `FR-EXPORT-001` | `backend/tests/test_api_vertical_slice.py::test_skill_publish_validation_and_export`; deterministic PDF bytes and scoped download |
@@ -27,6 +27,7 @@ This is the initial planned matrix. Codex must replace planned identifiers with 
 | `PERF-LOCAL-*` | `backend/scripts/benchmark_local.py --requests 20`; synthetic SQLite/filesystem retrieval p50/p95 report |
 | `SUBAGENT-*` | `backend/tests/test_delegation_recovery.py::test_partial_delegation_retry_is_bounded_and_reconciled`; retry/reconciliation REST contracts |
 | `SKILL-AUTHOR-*` | `backend/tests/test_delegation_recovery.py::test_skill_author_endpoint_creates_draft_only_and_provider_failure_is_explicit`; `/v1/skills/ai-drafts` |
+| `NFR-COST-*` | `backend/tests/test_api_vertical_slice.py::test_plan_approval_interrupt_resumes_same_run_and_thread`; `AgentRun.usage_json` and bounded `budget_json` are persisted and returned without provider secrets |
 
 Release blocks on any active requirement without proof or explicitly approved manual verification.
 

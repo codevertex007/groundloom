@@ -6,6 +6,7 @@ Groundloom v1 is product-complete only when all statements below have evidence.
 - Upload a supported source, observe durable processing state, search it, and navigate a citation to immutable passage context.
 - Generate a reviewable outline/draft with direct execution for small work and dynamic delegation for independent modules.
 - Interrupt for plan approval and resume the same thread without losing todos or duplicating effects.
+- Approval decisions are durable, scoped to the run/thread, auditable, and expose only bounded proposal metadata; rejecting a plan does not mutate canonical content.
 - Request a targeted edit, see a typed diff, reject without canonical change, and accept exactly once when the base version is current.
 - Detect stale-base conflicts rather than silently overwriting content.
 - Create, validate, repair, publish, select, and pin a reusable skill according to scope and role.

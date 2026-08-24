@@ -213,6 +213,35 @@ class AgentRun(TimeStamped, Base):
     pinned_config_json: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
     error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     cancel_requested: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+    usage_json: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
+    budget_json: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
+
+    @property
+    def usage(self) -> dict:
+        return self.usage_json
+
+    @property
+    def budget(self) -> dict:
+        return self.budget_json
+
+
+class ApprovalRequest(TimeStamped, Base):
+    __tablename__ = "approval_requests"
+    __table_args__ = (
+        UniqueConstraint("run_id", "kind", name="uq_approval_request_run_kind"),
+    )
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    project_id: Mapped[str] = mapped_column(ForeignKey("projects.id"), nullable=False, index=True)
+    thread_id: Mapped[str] = mapped_column(ForeignKey("agent_threads.id"), nullable=False, index=True)
+    run_id: Mapped[str] = mapped_column(ForeignKey("agent_runs.id"), nullable=False, index=True)
+    kind: Mapped[str] = mapped_column(String(40), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="pending", index=True)
+    payload_json: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
+    decision_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    decided_by: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    decided_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(180), nullable=True)
 
 
 class PublicEvent(TimeStamped, Base):
