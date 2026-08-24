@@ -49,6 +49,27 @@ def test_external_adapters_classify_outages_without_leaking_provider_errors():
     assert outage_error.value.code == "DEPENDENCY_UNAVAILABLE"
     assert outage_error.value.retryable is True
 
+    class WriteFailingClient(FakeClient):
+        def put_object(self, **_kwargs):
+            error = RuntimeError("provider credentials should not escape")
+            error.response = {"Error": {"Code": "AccessDenied"}}
+            raise error
+
+        def delete_object(self, **_kwargs):
+            error = RuntimeError("provider credentials should not escape")
+            error.response = {"Error": {"Code": "Timeout"}}
+            raise error
+
+    writes = object.__new__(S3ObjectStore)
+    writes.bucket = "test"
+    writes.client = WriteFailingClient("AccessDenied")
+    with pytest.raises(GroundloomError) as put_error:
+        writes.put_bytes("artifact.bin", b"data")
+    assert put_error.value.code == "DEPENDENCY_UNAVAILABLE"
+    with pytest.raises(GroundloomError) as delete_error:
+        writes.delete_bytes("artifact.bin")
+    assert delete_error.value.retryable is True
+
     class FailingTelemetry:
         def create_event(self, **_kwargs):
             raise RuntimeError("telemetry credentials")

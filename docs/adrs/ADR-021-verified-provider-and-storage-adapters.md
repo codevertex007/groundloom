@@ -27,5 +27,9 @@ versions in `pyproject.toml`; deployment still requires live integration and
 failure/recovery evidence.
 
 The object-store adapter owns binary bytes and validates server-derived keys.
+Its SDK client uses bounded standard retries with explicit connect/read
+timeouts, and maps every provider failure to the stable Groundloom error
+taxonomy so credentials, provider response bodies, and SDK exception details
+never cross the API boundary.
 The Postgres checkpointer owns execution state only. Langfuse receives redacted
 events and is not product storage.

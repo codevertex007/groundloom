@@ -11,7 +11,8 @@
 - [x] `IMPL-07-007` Export/preview/settings/command palette.
 - [x] `IMPL-07-008` Accessibility-oriented keyboard, responsive, reconnect/error/empty states; the shared client reconnects finite SSE replay with `Last-Event-ID` and exposes connection state.
 - [x] `IMPL-07-008a` Native frontend API-client contract tests cover typed retryable errors, correlation headers, finite SSE parsing, reconnect cursor propagation, deduplication input, and offline cancellation; a static UI contract test covers reference surfaces, connected mutation endpoints, dialogs, and keyboard semantics.
-- [ ] `IMPL-07-009` Component, visual-regression where stable, and full e2e suite; browser smoke and static UI contract evidence are local, while automated browser rendering remains a release gate.
+- [x] `IMPL-07-009a` Playwright local E2E covers project creation, persistent-agent drafting, proposal acceptance, settings persistence, command-palette navigation, and real backend/frontend startup; visual baselines remain a separate environment-specific gate.
+- [ ] `IMPL-07-009` Component, visual-regression where stable, and full e2e suite; automated component rendering and committed visual baselines remain release evidence.
 
 ## Exit gate
-The reference surfaces are implemented against the real local backend and the critical create/generate/review/accept journey passed browser smoke. API-client reconnect/error automation and a static UI contract suite are local; automated component rendering, accessibility, visual regression, and full browser e2e remain release evidence work.
+The reference surfaces are implemented against the real local backend. API-client reconnect/error automation, a static UI contract suite, a Playwright E2E suite, and rendered serious/critical axe checks are local; automated component rendering and committed visual baselines remain release evidence work. ADR-023 records the browser-test dependency and baseline policy.

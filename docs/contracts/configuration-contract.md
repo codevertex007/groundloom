@@ -14,6 +14,11 @@ telemetry. Deployment settings select `checkpoint_backend=postgres`,
 Optional dependency groups are `agent`, `storage`, and `observability`.
 Provider calls use at most `agent_max_attempts` (default 3) with bounded
 exponential backoff; cancellation is checked before each retry.
+S3-compatible storage calls use `object_store_max_attempts` (default 3) with
+`object_store_connect_timeout_seconds` (default 5) and
+`object_store_read_timeout_seconds` (default 30). Storage SDK failures are
+translated to typed retryable dependency errors; provider exception details
+are never returned or logged as product errors.
 `agent_inline_local=true` is the explicit local/test convenience default. It
 must be disabled for production; staging/production agent runs are queued for
 the durable agent worker and are never completed synchronously by the API.

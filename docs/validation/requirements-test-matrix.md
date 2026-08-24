@@ -15,9 +15,9 @@ This is the initial planned matrix. Codex must replace planned identifiers with 
 | `UI-STATE-001..002` | Browser smoke of project empty/loading/canvas states; React API error banner and reload-backed state |
 | `UI-RUN-001..002` | Browser smoke durable activity panel; `/v1/threads/{id}/events` replay DTO and `/events/stream` SSE smoke |
 | `UI-PATCH-001..002` | Browser smoke proposal review; `test_patch_reject_and_accept_exactly_once` |
-| `UI-CITE-001`, `UI-A11Y-001` | Canvas citation panel and keyboard `Ctrl/Cmd+K`, `Ctrl/Cmd+Enter`; `frontend/src/api.test.js` reconnect/error assertions; `frontend/src/ui-contract.test.js` surface/dialog/keyboard semantics; browser DOM/screenshot evidence remains manual |
+| `UI-CITE-001`, `UI-A11Y-001` | Canvas citation panel and keyboard `Ctrl/Cmd+K`, `Ctrl/Cmd+Enter`; `frontend/src/api.test.js` reconnect/error assertions; `frontend/src/ui-contract.test.js` surface/dialog/keyboard semantics; `frontend/e2e/groundloom.spec.js` real-browser journey; visual/screen-reader evidence remains release work |
 | `UI-SETTINGS-*`, `PREF-*` | `backend/tests/test_api_vertical_slice.py::test_workspace_preferences_are_typed_audited_pinned_and_idempotent`; connected Settings modal; migration 007 |
-| `NFR-REL-001..004` | `backend/tests/test_adapters_and_jobs.py::test_ingestion_worker_reclaims_and_replays_a_queued_job`; `backend/tests/test_api_vertical_slice.py` replay/idempotency tests; backup/restore and live failure injection remain release evidence |
+| `NFR-REL-001..004` | `backend/tests/test_adapters_and_jobs.py::test_ingestion_worker_reclaims_and_replays_a_queued_job`, `::test_external_adapters_classify_outages_without_leaking_provider_errors`; `backend/tests/test_api_vertical_slice.py` replay/idempotency tests; backup/restore and live failure injection remain release evidence |
 | `NFR-PERF-001..004` | API/retrieval/agent-activity load scenarios |
 | `SEC-AUTH-001..006` | `backend/tests/test_api_vertical_slice.py::test_cross_workspace_is_denied`; `backend/tests/test_adapters_and_jobs.py::test_local_object_store_rejects_escape_and_round_trips`; scoped tool/memory tests |
 | `SEC-IDENTITY-*` | `backend/tests/test_security_boundaries.py::test_signed_identity_controls_workspace_context`; `backend/app/auth.py` signed context verifier |

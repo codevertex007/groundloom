@@ -24,4 +24,8 @@ agent path without external credentials, set
 `GROUNDLOOM_AGENT_INLINE_LOCAL=false` and run the agent worker with the local
 provider; staging/production always require the durable worker path.
 
+The frontend E2E suite starts isolated local backend and frontend processes. From
+`frontend`, run `npx playwright install chromium` once and then
+`npm run test:e2e`.
+
 Fresh setup, reset of local disposable services, migrations, tests, and UI smoke must be reproducible on supported developer platforms. Production mode rejects local bypasses. Record exact package/runtime versions and troubleshooting for ports, migrations, worker leases, and callback URLs.

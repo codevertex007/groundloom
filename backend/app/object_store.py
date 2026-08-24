@@ -69,54 +69,71 @@ class S3ObjectStore:
             raise RuntimeError("S3 object storage requires GROUNDLOOM_OBJECT_STORE_BUCKET")
         try:
             import boto3
+            from botocore.config import Config
         except ImportError as exc:
             raise RuntimeError("Install the storage extra to use S3-compatible object storage") from exc
+        if settings.object_store_connect_timeout_seconds <= 0:
+            raise RuntimeError("S3 connect timeout must be positive")
+        if settings.object_store_read_timeout_seconds <= 0:
+            raise RuntimeError("S3 read timeout must be positive")
+        if settings.object_store_max_attempts < 1:
+            raise RuntimeError("S3 max attempts must be at least one")
         self.bucket = settings.object_store_bucket
+        self.client_config = Config(
+            connect_timeout=settings.object_store_connect_timeout_seconds,
+            read_timeout=settings.object_store_read_timeout_seconds,
+            retries={"mode": "standard", "max_attempts": settings.object_store_max_attempts},
+        )
         self.client = boto3.client(
             "s3",
             endpoint_url=settings.object_store_endpoint,
             region_name=settings.object_store_region,
             aws_access_key_id=settings.object_store_access_key,
             aws_secret_access_key=settings.object_store_secret_key,
+            config=self.client_config,
+        )
+
+    @staticmethod
+    def _dependency_error(exc: Exception) -> GroundloomError:
+        response = getattr(exc, "response", {}) or {}
+        code = response.get("Error", {}).get("Code")
+        if code in {"NoSuchKey", "404", "NotFound"}:
+            return GroundloomError("RESOURCE_NOT_FOUND", "The artifact was not found.", 404)
+        return GroundloomError(
+            "DEPENDENCY_UNAVAILABLE",
+            "Object storage is temporarily unavailable.",
+            503,
+            retryable=True,
         )
 
     def put_bytes(self, key: str, data: bytes) -> None:
-        self.client.put_object(Bucket=self.bucket, Key=_validate_key(key), Body=data)
+        try:
+            self.client.put_object(Bucket=self.bucket, Key=_validate_key(key), Body=data)
+        except Exception as exc:
+            raise self._dependency_error(exc) from exc
 
     def get_bytes(self, key: str) -> bytes:
         try:
             response = self.client.get_object(Bucket=self.bucket, Key=_validate_key(key))
             return response["Body"].read()
         except Exception as exc:
-            response = getattr(exc, "response", {}) or {}
-            code = response.get("Error", {}).get("Code")
-            if code in {"NoSuchKey", "404", "NotFound"}:
-                raise GroundloomError("RESOURCE_NOT_FOUND", "The artifact was not found.", 404) from exc
-            raise GroundloomError(
-                "DEPENDENCY_UNAVAILABLE",
-                "Object storage is temporarily unavailable.",
-                503,
-                retryable=True,
-            ) from exc
+            raise self._dependency_error(exc) from exc
 
     def exists(self, key: str) -> bool:
         try:
             self.client.head_object(Bucket=self.bucket, Key=_validate_key(key))
             return True
         except Exception as exc:
-            response = getattr(exc, "response", {}) or {}
-            code = response.get("Error", {}).get("Code")
-            if code in {"NoSuchKey", "404", "NotFound"}:
+            error = self._dependency_error(exc)
+            if error.code == "RESOURCE_NOT_FOUND":
                 return False
-            raise GroundloomError(
-                "DEPENDENCY_UNAVAILABLE",
-                "Object storage is temporarily unavailable.",
-                503,
-                retryable=True,
-            ) from exc
+            raise error from exc
 
     def delete_bytes(self, key: str) -> None:
-        self.client.delete_object(Bucket=self.bucket, Key=_validate_key(key))
+        try:
+            self.client.delete_object(Bucket=self.bucket, Key=_validate_key(key))
+        except Exception as exc:
+            raise self._dependency_error(exc) from exc
 
     def health(self) -> bool:
         try:

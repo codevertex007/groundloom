@@ -22,6 +22,9 @@ class Settings(BaseSettings):
     object_store_region: str = "us-east-1"
     object_store_access_key: str | None = None
     object_store_secret_key: str | None = None
+    object_store_connect_timeout_seconds: int = 5
+    object_store_read_timeout_seconds: int = 30
+    object_store_max_attempts: int = 3
     public_base_url: str = "http://localhost:8000"
     cors_origins: list[str] | str = Field(
         default_factory=lambda: [
@@ -102,6 +105,9 @@ class Settings(BaseSettings):
             "database_backend": self.database_url.split(":", 1)[0],
             "checkpoint_backend": self.checkpoint_backend,
             "object_store_backend": self.object_store_backend,
+            "object_store_connect_timeout_seconds": self.object_store_connect_timeout_seconds,
+            "object_store_max_attempts": self.object_store_max_attempts,
+            "object_store_read_timeout_seconds": self.object_store_read_timeout_seconds,
             "model_provider": self.model_provider,
             "model_name": self.model_name,
             "telemetry_provider": self.telemetry_provider,

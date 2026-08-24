@@ -76,6 +76,10 @@ cd frontend; npm run build
 cd ..
 python backend/scripts/run_evals.py
 
+# Browser E2E (downloads the pinned local Chromium once)
+cd frontend; npx playwright install chromium; npm run test:e2e
+cd ..
+
 # Optional bounded worker pass
 python backend/scripts/ingestion_worker.py --once
 python backend/scripts/export_worker.py

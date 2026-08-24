@@ -16,12 +16,12 @@
   --border: #dedad0;
   --border-strong: #c9c3b7;
   --text: #262521;
-  --muted: #747068;
-  --faint: #aaa59b;
-  --accent: #c9674a;
+  --muted: #625e57;
+  --faint: #6b665e;
+  --accent: #b8543a;
   --accent-2: #b8543a;
   --accent-soft: #f2d9ce;
-  --green: #4d8a6c;
+  --green: #357054;
   --shadow: 0 14px 34px rgba(47, 39, 30, 0.12);
 }
 * {
