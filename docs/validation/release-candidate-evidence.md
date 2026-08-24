@@ -5,7 +5,7 @@ sign-off. It was refreshed on 2026-08-25 from the repository root.
 
 | Gate | Command/evidence | Result |
 |---|---|---|
-| Backend unit/contract/security | `python -m pytest -q` | 26 passed |
+| Backend unit/contract/security | `python -m pytest -q` | 27 passed; one optional-provider test skips when extras are absent |
 | Python lint | `python -m ruff check backend/app backend/tests backend/scripts` | Passed |
 | Python types | `python -m mypy backend/app` | Passed; 20 source files |
 | Documentation/traceability | `python backend/scripts/validate_docs.py` | Passed; 165 markdown documents |
