@@ -1,0 +1,58 @@
+"""Redacted observability adapter.
+
+Telemetry is diagnostic state only. The local adapter is deterministic and
+keeps bounded in-process records for tests; a production Langfuse adapter must
+be explicitly configured and installed.
+"""
+
+from dataclasses import dataclass, field
+from typing import Any
+
+SENSITIVE_KEYS = {
+    "content",
+    "text",
+    "source_text",
+    "prompt",
+    "completion",
+    "token",
+    "api_key",
+    "password",
+    "secret",
+}
+
+
+def redact(attributes: dict[str, Any]) -> dict[str, Any]:
+    safe: dict[str, Any] = {}
+    for key, value in attributes.items():
+        if key.lower() in SENSITIVE_KEYS:
+            safe[key] = "[REDACTED]"
+        elif isinstance(value, dict):
+            safe[key] = redact(value)
+        else:
+            safe[key] = value
+    return safe
+
+
+@dataclass
+class LocalTelemetry:
+    records: list[dict[str, Any]] = field(default_factory=list)
+
+    def emit(self, event: str, attributes: dict[str, Any]) -> None:
+        if len(self.records) >= 500:
+            self.records.pop(0)
+        self.records.append({"event": event, "attributes": redact(attributes)})
+
+
+class LangfuseTelemetry:
+    def __init__(self, public_key: str | None, secret_key: str | None, host: str | None):
+        if not public_key or not secret_key or not host:
+            raise RuntimeError("Langfuse telemetry requires public key, secret key, and host")
+        raise RuntimeError("Langfuse integration requires a verified deployment adapter")
+
+
+def build_telemetry(provider: str, public_key: str | None = None, secret_key: str | None = None, host: str | None = None):
+    if provider == "local":
+        return LocalTelemetry()
+    if provider == "langfuse":
+        return LangfuseTelemetry(public_key, secret_key, host)
+    raise RuntimeError(f"Unsupported telemetry provider: {provider}")

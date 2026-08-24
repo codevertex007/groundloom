@@ -1,0 +1,21 @@
+# Glossary
+
+- **Primary project agent:** the persistent Deep Agent that owns Groundloom's adaptive semantic loop for one project.
+- **Run:** one auditable unit of agent activity triggered by a user request or approved background continuation.
+- **Thread:** durable conversational/execution history; normally `project:{project_id}:primary`.
+- **Subagent:** a bounded specialist invoked by the primary agent with explicit tools, context, permissions, and budget.
+- **Skill:** a versioned instruction package disclosed progressively to an agent.
+- **Memory:** stable user/workspace preference data; never canonical project content or source text.
+- **Source:** a logical user-provided evidence asset.
+- **Source version:** immutable bytes and normalized representation of one revision of a source.
+- **Evidence passage:** immutable, addressable source excerpt with page/block/offset lineage.
+- **Content version:** immutable snapshot of typed content blocks.
+- **Proposal/draft patch:** validated agent-produced operations against one base content version; not canonical.
+- **Accept:** deterministic command that commits an eligible proposal as a new content version.
+- **Checkpoint:** durable LangGraph/Deep Agents execution state used to resume a thread/run.
+- **Domain state:** canonical product records in Postgres.
+- **Scratch state:** non-canonical intermediate files, notes, offloaded outputs, and summaries.
+- **Outbox:** records domain/public events atomically with state changes for reliable delivery.
+- **Validation hook:** deterministic check that runs regardless of the model's chosen trajectory.
+- **Semantic grader:** model-based rubric evaluator with bounded iterations; advisory unless policy explicitly gates acceptance.
+- **Pinned run:** a run whose relevant source, skill, prompt, tool, model, retrieval, and evaluator versions are recorded.
