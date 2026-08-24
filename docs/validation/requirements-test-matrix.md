@@ -15,7 +15,7 @@ This is the initial planned matrix. Codex must replace planned identifiers with 
 | `UI-STATE-001..002` | Browser smoke of project empty/loading/canvas states; React API error banner and reload-backed state |
 | `UI-RUN-001..002` | Browser smoke durable activity panel; `/v1/threads/{id}/events` replay DTO and `/events/stream` SSE smoke |
 | `UI-PATCH-001..002` | Browser smoke proposal review; `test_patch_reject_and_accept_exactly_once` |
-| `UI-CITE-001`, `UI-A11Y-001` | Canvas citation panel and keyboard `Ctrl/Cmd+K`, `Ctrl/Cmd+Enter`; browser DOM/screenshot evidence |
+| `UI-CITE-001`, `UI-A11Y-001` | Canvas citation panel and keyboard `Ctrl/Cmd+K`, `Ctrl/Cmd+Enter`; `frontend/src/api.test.js` reconnect/error assertions; browser DOM/screenshot evidence remains manual |
 | `NFR-REL-001..004` | `backend/tests/test_adapters_and_jobs.py::test_ingestion_worker_reclaims_and_replays_a_queued_job`; `backend/tests/test_api_vertical_slice.py` replay/idempotency tests; backup/restore and live failure injection remain release evidence |
 | `NFR-PERF-001..004` | API/retrieval/agent-activity load scenarios |
 | `SEC-AUTH-001..006` | `backend/tests/test_api_vertical_slice.py::test_cross_workspace_is_denied`; `backend/tests/test_adapters_and_jobs.py::test_local_object_store_rejects_escape_and_round_trips`; scoped tool/memory tests |
@@ -29,3 +29,6 @@ This is the initial planned matrix. Codex must replace planned identifiers with 
 | `SKILL-AUTHOR-*` | `backend/tests/test_delegation_recovery.py::test_skill_author_endpoint_creates_draft_only_and_provider_failure_is_explicit`; `/v1/skills/ai-drafts` |
 
 Release blocks on any active requirement without proof or explicitly approved manual verification.
+
+Export worker proof: backend/tests/test_retention_and_export_workers.py::test_staging_export_is_queued_and_worker_completes.
+Deletion/retention proof: backend/tests/test_retention_and_export_workers.py::test_project_deletion_is_scoped_audited_and_removes_artifacts.

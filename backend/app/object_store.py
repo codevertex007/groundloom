@@ -19,6 +19,8 @@ class ObjectStore(Protocol):
 
     def exists(self, key: str) -> bool: ...
 
+    def delete_bytes(self, key: str) -> None: ...
+
     def health(self) -> bool: ...
 
 
@@ -53,6 +55,9 @@ class LocalObjectStore:
 
     def exists(self, key: str) -> bool:
         return self._path(key).exists()
+
+    def delete_bytes(self, key: str) -> None:
+        self._path(key).unlink(missing_ok=True)
 
     def health(self) -> bool:
         return self.root.exists()
@@ -91,6 +96,9 @@ class S3ObjectStore:
             return True
         except Exception:
             return False
+
+    def delete_bytes(self, key: str) -> None:
+        self.client.delete_object(Bucket=self.bucket, Key=_validate_key(key))
 
     def health(self) -> bool:
         try:

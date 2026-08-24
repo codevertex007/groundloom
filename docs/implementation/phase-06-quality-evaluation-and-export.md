@@ -13,3 +13,7 @@
 
 ## Exit gate
 Local gate passes for evidence-linked deterministic validation and idempotent accepted-content export. Semantic evaluator baselines and external telemetry integration remain release work.
+
+The export job now uses a durable leased worker in staging/production. Development
+can run one inline pass for the credential-free quickstart or set
+GROUNDLOOM_EXPORT_INLINE_LOCAL=false to exercise the queue worker.

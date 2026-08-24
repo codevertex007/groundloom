@@ -217,6 +217,21 @@ class ExportOut(ProductModel):
     expires_at: datetime | None = None
 
 
+class DeletionRequestCreate(BaseModel):
+    idempotency_key: str | None = Field(default=None, max_length=180)
+
+
+class DeletionRequestOut(ProductModel):
+    id: str
+    scope_type: str
+    resource_id: str
+    status: str
+    attempts: int
+    step_status: dict[str, Any]
+    error_code: str | None = None
+    completed_at: datetime | None = None
+
+
 class MemoryWrite(BaseModel):
     namespace: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,79}$")
     key: str = Field(pattern=r"^[a-z0-9][a-z0-9._-]{0,159}$")

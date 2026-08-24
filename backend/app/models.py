@@ -314,6 +314,37 @@ class ExportJob(TimeStamped, Base):
     object_key: Mapped[str | None] = mapped_column(String(500), nullable=True)
     error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
     expires_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+
+
+class RetentionPolicy(TimeStamped, Base):
+    __tablename__ = "retention_policies"
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), primary_key=True)
+    sources_days: Mapped[int] = mapped_column(Integer, default=365, nullable=False)
+    projects_days: Mapped[int] = mapped_column(Integer, default=365, nullable=False)
+    agent_data_days: Mapped[int] = mapped_column(Integer, default=90, nullable=False)
+    exports_days: Mapped[int] = mapped_column(Integer, default=7, nullable=False)
+    audit_days: Mapped[int] = mapped_column(Integer, default=2555, nullable=False)
+    legal_hold: Mapped[bool] = mapped_column(Boolean, default=False, nullable=False)
+
+
+class DeletionRequest(TimeStamped, Base):
+    __tablename__ = "deletion_requests"
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), nullable=False, index=True)
+    scope_type: Mapped[str] = mapped_column(String(30), nullable=False)
+    resource_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    requested_by: Mapped[str] = mapped_column(String(80), nullable=False)
+    status: Mapped[str] = mapped_column(String(30), default="pending", nullable=False, index=True)
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    step_status: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+    idempotency_key: Mapped[str | None] = mapped_column(String(180), nullable=True)
+    completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
 
 class AuditEvent(TimeStamped, Base):

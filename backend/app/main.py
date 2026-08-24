@@ -11,9 +11,11 @@ from .config import Settings, get_settings
 from .context import RuntimeContext, resolve_context
 from .db import build_session_factory, init_database
 from .errors import GroundloomError
+from .migrations import apply_migrations
 from .models import (
     AgentRun,
     AgentThread,
+    DeletionRequest,
     ExportJob,
     IdempotencyRecord,
     OutlineVersion,
@@ -25,6 +27,8 @@ from .models import (
 from .object_store import build_object_store
 from .schemas import (
     DecisionIn,
+    DeletionRequestCreate,
+    DeletionRequestOut,
     ErrorBody,
     EventOut,
     EvidenceBundle,
@@ -67,6 +71,7 @@ from .services import (
     reconcile_delegated_tasks,
     reject_patch,
     remember_idempotency,
+    request_project_deletion,
     retry_delegated_task,
     search_evidence,
     seed_local,
@@ -83,6 +88,7 @@ from .telemetry import build_telemetry
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     settings.validate_runtime()
+    apply_migrations(settings.database_url)
     db_engine = init_database(settings.database_url)
     session_factory = build_session_factory(settings.database_url, db_engine)
     with session_factory() as db:
@@ -694,6 +700,30 @@ def register_routes(app: FastAPI) -> FastAPI:
         job = export_content(db, ctx, request.app.state.settings, body)
         return export_dto(job, request)
 
+    @app.post(
+        "/v1/projects/{project_id}/deletion",
+        response_model=DeletionRequestOut,
+        status_code=202,
+    )
+    def project_deletion_request(
+        project_id: str,
+        body: DeletionRequestCreate,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+    ):
+        return deletion_dto(request_project_deletion(db, ctx, project_id, body.idempotency_key))
+
+    @app.get("/v1/deletions/{deletion_id}", response_model=DeletionRequestOut)
+    def deletion_get(
+        deletion_id: str,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+    ):
+        deletion = db.query(DeletionRequest).filter_by(id=deletion_id, workspace_id=ctx.workspace_id).first()
+        if not deletion:
+            raise GroundloomError("RESOURCE_NOT_FOUND", "The deletion request was not found.", 404)
+        return deletion_dto(deletion)
+
     @app.get("/v1/exports/{export_id}", response_model=ExportOut)
     def export_get(
         export_id: str,
@@ -761,6 +791,19 @@ def export_dto(job: ExportJob, request: Request) -> dict:
         if job.status == "completed"
         else None,
         "expires_at": job.expires_at,
+    }
+
+
+def deletion_dto(deletion: DeletionRequest) -> dict:
+    return {
+        "id": deletion.id,
+        "scope_type": deletion.scope_type,
+        "resource_id": deletion.resource_id,
+        "status": deletion.status,
+        "attempts": deletion.attempts,
+        "step_status": deletion.step_status,
+        "error_code": deletion.error_code,
+        "completed_at": deletion.completed_at,
     }
 
 

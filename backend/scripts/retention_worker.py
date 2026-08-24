@@ -1,10 +1,10 @@
-"""Deterministic export worker entrypoint."""
+"""Deterministic retention/deletion worker entrypoint."""
 
 from app.config import get_settings
 from app.context import RuntimeContext
 from app.db import build_session_factory, init_database
 from app.migrations import apply_migrations
-from app.services import run_export_worker_once
+from app.services import run_deletion_worker_once
 
 
 def main() -> None:
@@ -16,11 +16,12 @@ def main() -> None:
         settings.local_user_id,
         settings.local_workspace_id,
         frozenset({"workspace_admin"}),
-        "corr-export-worker",
+        "corr-retention-worker",
     )
     with factory() as db:
-        print(run_export_worker_once(db, ctx, settings, "export-worker", limit=25))
+        print(run_deletion_worker_once(db, ctx, settings, "retention-worker", limit=25))
     engine.dispose(close=True)
+
 
 if __name__ == "__main__":
     main()

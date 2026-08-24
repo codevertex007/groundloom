@@ -1,6 +1,6 @@
 /** @typedef {{method?: string, headers?: Record<string, string>, body?: BodyInit}} RequestOptions */
 
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
+const API = import.meta.env?.VITE_API_URL || "http://127.0.0.1:8000";
 
 /** @param {RequestOptions} options */
 function requestHeaders(options) {
@@ -8,7 +8,7 @@ function requestHeaders(options) {
     "Content-Type": "application/json",
     "X-User-ID": "local-user",
     "X-Workspace-ID": "local-workspace",
-    "X-Correlation-ID": crypto.randomUUID(),
+    "X-Correlation-ID": globalThis.crypto?.randomUUID?.() || "local-correlation",
     ...(options.headers || {}),
   };
 }

@@ -10,7 +10,8 @@
 - [x] `IMPL-07-006` Diff/review/accept/reject/conflict flows.
 - [x] `IMPL-07-007` Export/preview/settings/command palette.
 - [x] `IMPL-07-008` Accessibility-oriented keyboard, responsive, reconnect/error/empty states; the shared client reconnects finite SSE replay with `Last-Event-ID` and exposes connection state.
+- [x] `IMPL-07-008a` Native frontend API-client contract tests cover typed retryable errors, correlation headers, finite SSE parsing, reconnect cursor propagation, deduplication input, and offline cancellation; browser visual regression and full UI e2e remain release evidence.
 - [ ] `IMPL-07-009` Component, visual-regression where stable, and full e2e suite.
 
 ## Exit gate
-The reference surfaces are implemented against the real local backend and the critical create/generate/review/accept journey passed browser smoke. Automated accessibility and reconnect-failure suites remain release evidence work.
+The reference surfaces are implemented against the real local backend and the critical create/generate/review/accept journey passed browser smoke. API-client reconnect/error automation is now local; automated accessibility, visual regression, and full browser e2e remain release evidence work.

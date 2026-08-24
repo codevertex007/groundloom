@@ -8,4 +8,9 @@ entrypoints remain independently runnable deployment seams. The optional
 adapters. Never require production credentials or real tenant data for local
 tests.
 
+The export worker can be run with python backend/scripts/export_worker.py and
+the retention worker with python backend/scripts/retention_worker.py. The
+development adapter renders exports inline by default; set
+GROUNDLOOM_EXPORT_INLINE_LOCAL=false to exercise the durable export worker.
+
 Fresh setup, reset of local disposable services, migrations, tests, and UI smoke must be reproducible on supported developer platforms. Production mode rejects local bypasses. Record exact package/runtime versions and troubleshooting for ports, migrations, worker leases, and callback URLs.

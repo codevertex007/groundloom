@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import re
+import shutil
 import time
 import zipfile
 from datetime import timedelta
@@ -23,6 +24,7 @@ from .models import (
     ContentBlock,
     ContentVersion,
     DelegatedTask,
+    DeletionRequest,
     ExportJob,
     IdempotencyRecord,
     IngestionJob,
@@ -34,6 +36,7 @@ from .models import (
     Project,
     ProjectConfigVersion,
     PublicEvent,
+    RetentionPolicy,
     Skill,
     SkillVersion,
     Source,
@@ -1951,7 +1954,7 @@ def export_content(
 ) -> ExportJob:
     ctx.require("export content", {"author", "reviewer", "workspace_admin", "organization_admin"})
     project = _project(db, ctx, body.project_id)
-    version, blocks = content_blocks(db, ctx, project.id, body.content_version_id)
+    version, _blocks = content_blocks(db, ctx, project.id, body.content_version_id)
     key = body.idempotency_key or f"export:{project.id}:{version.id}:{body.format}"
     existing = (
         db.query(ExportJob).filter_by(workspace_id=ctx.workspace_id, idempotency_key=key).first()
@@ -1964,18 +1967,77 @@ def export_content(
         project_id=project.id,
         content_version_id=version.id,
         format=body.format,
-        status="rendering",
+        status="queued",
         idempotency_key=key,
         expires_at=utcnow() + timedelta(days=7),
     )
     db.add(job)
     db.flush()
-    rendered = render_content(project.name, blocks, body.format)
-    suffix = {"md": "md", "html": "html", "pdf": "pdf", "docx": "docx"}[body.format]
+    audit(db, ctx, "export.requested", "export_job", job.id, "Queued immutable content export")
+    outbox(
+        db,
+        ctx.workspace_id,
+        "ExportRequested",
+        "export_job",
+        job.id,
+        {"export_id": job.id, "content_version_id": version.id, "format": body.format},
+    )
+    db.commit()
+    # The local adapter keeps the single-process quickstart usable. Staging and
+    # production leave the durable job queued for the export worker.
+    if settings.export_inline_local is not False and settings.env in {"development", "test"}:
+        run_export_worker_once(db, ctx, settings, "inline-local", limit=1)
+        job = db.query(ExportJob).filter_by(id=job.id, workspace_id=ctx.workspace_id).one()
+    return job
+
+
+def claim_export_jobs(
+    db: Session,
+    workspace_id: str,
+    worker_id: str,
+    *,
+    limit: int = 10,
+    lease_seconds: int = 300,
+) -> list[ExportJob]:
+    now = utcnow()
+    rows = (
+        db.query(ExportJob)
+        .filter(ExportJob.workspace_id == workspace_id)
+        .filter(
+            (ExportJob.status == "queued")
+            | ((ExportJob.status == "rendering") & (ExportJob.lease_until < now))
+        )
+        .order_by(ExportJob.created_at)
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+    for row in rows:
+        row.status = "rendering"
+        row.lease_owner = worker_id
+        row.lease_until = now + timedelta(seconds=lease_seconds)
+        row.attempts += 1
+    db.commit()
+    return rows
+
+
+def process_export_job(
+    db: Session, ctx: RuntimeContext, settings: Settings, job: ExportJob
+) -> ExportJob:
+    if job.workspace_id != ctx.workspace_id:
+        raise GroundloomError("FORBIDDEN", "The export job is outside the workspace scope.", 403)
+    if job.status == "completed" and job.object_key:
+        return job
+    project = _project(db, ctx, job.project_id)
+    version, blocks = content_blocks(db, ctx, project.id, job.content_version_id)
+    job.status = "storing"
+    suffix = {"md": "md", "html": "html", "pdf": "pdf", "docx": "docx"}[job.format]
     object_key = f"workspaces/{ctx.workspace_id}/exports/{job.id}.{suffix}"
-    build_object_store(settings).put_bytes(object_key, rendered)
+    build_object_store(settings).put_bytes(object_key, render_content(project.name, blocks, job.format))
     job.object_key = object_key
     job.status = "completed"
+    job.error_code = None
+    job.lease_owner = None
+    job.lease_until = None
     audit(db, ctx, "export.completed", "export_job", job.id, "Rendered immutable content version")
     outbox(
         db,
@@ -1983,10 +2045,320 @@ def export_content(
         "ExportCompleted",
         "export_job",
         job.id,
-        {"export_id": job.id, "content_version_id": version.id, "format": body.format},
+        {"export_id": job.id, "content_version_id": version.id, "format": job.format},
     )
     db.commit()
     return job
+
+
+def run_export_worker_once(
+    db: Session,
+    ctx: RuntimeContext,
+    settings: Settings,
+    worker_id: str,
+    *,
+    limit: int = 10,
+) -> dict[str, int]:
+    claimed = claim_export_jobs(db, ctx.workspace_id, worker_id, limit=limit)
+    completed = 0
+    failed = 0
+    for job in claimed:
+        try:
+            process_export_job(db, ctx, settings, job)
+            completed += 1
+        except Exception as exc:
+            db.rollback()
+            failed_job = db.query(ExportJob).filter_by(id=job.id, workspace_id=ctx.workspace_id).first()
+            if failed_job:
+                failed_job.status = "failed"
+                failed_job.error_code = exc.code if isinstance(exc, GroundloomError) else "EXPORT_FAILED"
+                failed_job.lease_owner = None
+                failed_job.lease_until = None
+                audit(db, ctx, "export.failed", "export_job", failed_job.id, "Export worker failed")
+                outbox(
+                    db,
+                    ctx.workspace_id,
+                    "ExportFailed",
+                    "export_job",
+                    failed_job.id,
+                    {"export_id": failed_job.id, "error_code": failed_job.error_code},
+                )
+                db.commit()
+            failed += 1
+    return {"claimed": len(claimed), "completed": completed, "failed": failed}
+
+
+def ensure_retention_policy(db: Session, workspace_id: str) -> RetentionPolicy:
+    policy = db.get(RetentionPolicy, workspace_id)
+    if not policy:
+        policy = RetentionPolicy(workspace_id=workspace_id)
+        db.add(policy)
+        db.flush()
+    return policy
+
+
+def request_project_deletion(
+    db: Session, ctx: RuntimeContext, project_id: str, idempotency_key: str | None = None
+) -> DeletionRequest:
+    ctx.require("request project deletion", {"workspace_admin", "organization_admin"})
+    project = _project(db, ctx, project_id)
+    existing = None
+    if idempotency_key:
+        existing = (
+            db.query(DeletionRequest)
+            .filter_by(workspace_id=ctx.workspace_id, idempotency_key=idempotency_key)
+            .first()
+        )
+    if existing:
+        return existing
+    existing = (
+        db.query(DeletionRequest)
+        .filter_by(workspace_id=ctx.workspace_id, scope_type="project", resource_id=project.id)
+        .filter(DeletionRequest.status.in_(["pending", "running", "blocked"]))
+        .first()
+    )
+    if existing:
+        return existing
+    ensure_retention_policy(db, ctx.workspace_id)
+    request = DeletionRequest(
+        id=new_id("del"),
+        workspace_id=ctx.workspace_id,
+        scope_type="project",
+        resource_id=project.id,
+        requested_by=ctx.user_id,
+        status="pending",
+        idempotency_key=idempotency_key,
+        step_status={"canonical": "pending", "objects": "pending", "checkpoints": "pending"},
+    )
+    db.add(request)
+    project.status = "deletion_pending"
+    for run in db.query(AgentRun).filter_by(project_id=project.id, workspace_id=ctx.workspace_id).all():
+        if run.status in {"queued", "running", "waiting_for_user", "waiting_for_approval"}:
+            run.cancel_requested = True
+    audit(db, ctx, "retention.deletion.requested", "project", project.id, "Project deletion queued")
+    outbox(
+        db,
+        ctx.workspace_id,
+        "RetentionDeletionRequested",
+        "deletion_request",
+        request.id,
+        {"request_id": request.id, "scope_type": request.scope_type, "resource_id": project.id},
+    )
+    db.commit()
+    return request
+
+
+def claim_deletion_requests(
+    db: Session,
+    workspace_id: str,
+    worker_id: str,
+    *,
+    limit: int = 10,
+    lease_seconds: int = 300,
+) -> list[DeletionRequest]:
+    now = utcnow()
+    rows = (
+        db.query(DeletionRequest)
+        .filter(DeletionRequest.workspace_id == workspace_id)
+        .filter(
+            (DeletionRequest.status == "pending")
+            | (
+                (DeletionRequest.status == "running")
+                & (DeletionRequest.lease_until < now)
+                & (DeletionRequest.attempts < 3)
+            )
+        )
+        .order_by(DeletionRequest.created_at)
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+    for row in rows:
+        row.status = "running"
+        row.lease_owner = worker_id
+        row.lease_until = now + timedelta(seconds=lease_seconds)
+        row.attempts += 1
+    db.commit()
+    return rows
+
+
+def _delete_project_records(db: Session, ctx: RuntimeContext, project: Project) -> None:
+    config_versions = db.query(ProjectConfigVersion).filter_by(
+        project_id=project.id, workspace_id=ctx.workspace_id
+    ).all()
+    selected_source_version_ids = {
+        source_version_id
+        for config in config_versions
+        for source_version_id in (config.source_version_ids or [])
+    }
+    content_version_ids = [
+        row.id
+        for row in db.query(ContentVersion).filter_by(
+            project_id=project.id, workspace_id=ctx.workspace_id
+        ).all()
+    ]
+    validation_ids = [
+        row.id
+        for row in db.query(ValidationRun).filter_by(
+            project_id=project.id, workspace_id=ctx.workspace_id
+        ).all()
+    ]
+    if validation_ids:
+        db.query(ValidationFinding).filter(ValidationFinding.validation_run_id.in_(validation_ids)).delete(
+            synchronize_session=False
+        )
+    if content_version_ids:
+        db.query(ContentBlock).filter(ContentBlock.content_version_id.in_(content_version_ids)).delete(
+            synchronize_session=False
+        )
+    db.query(ValidationRun).filter(ValidationRun.id.in_(validation_ids)).delete(synchronize_session=False)
+    db.query(ContentVersion).filter(ContentVersion.id.in_(content_version_ids)).delete(
+        synchronize_session=False
+    )
+    db.query(PublicEvent).filter_by(project_id=project.id, workspace_id=ctx.workspace_id).delete(
+        synchronize_session=False
+    )
+    all_configs = (
+        db.query(ProjectConfigVersion)
+        .filter_by(workspace_id=ctx.workspace_id)
+        .filter(ProjectConfigVersion.project_id != project.id)
+        .all()
+    )
+    shared_ids = {
+        version_id
+        for config in all_configs
+        for version_id in (config.source_version_ids or [])
+    }
+    for model in (Todo, DelegatedTask, Patch, AgentRun, ProjectConfigVersion, OutlineVersion, ExportJob):
+        db.query(model).filter_by(project_id=project.id, workspace_id=ctx.workspace_id).delete(
+            synchronize_session=False
+        )
+    db.query(AgentThread).filter_by(project_id=project.id, workspace_id=ctx.workspace_id).delete(
+        synchronize_session=False
+    )
+    # Source versions are immutable and may be selected by another project;
+    # delete only unshared versions and their rebuildable index rows.
+    removable_ids = selected_source_version_ids - shared_ids
+    if removable_ids:
+        db.query(SourceChunk).filter(SourceChunk.source_version_id.in_(removable_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(SourceBlock).filter(SourceBlock.source_version_id.in_(removable_ids)).delete(
+            synchronize_session=False
+        )
+        source_versions = db.query(SourceVersion).filter(SourceVersion.id.in_(removable_ids)).all()
+        source_ids = {version.source_id for version in source_versions}
+        db.query(IngestionJob).filter(IngestionJob.source_version_id.in_(removable_ids)).delete(
+            synchronize_session=False
+        )
+        db.query(SourceVersion).filter(SourceVersion.id.in_(removable_ids)).delete(
+            synchronize_session=False
+        )
+        for source_id in source_ids:
+            source = db.query(Source).filter_by(id=source_id, workspace_id=ctx.workspace_id).first()
+            if source:
+                remaining = (
+                    db.query(SourceVersion)
+                    .filter_by(source_id=source_id, workspace_id=ctx.workspace_id)
+                    .order_by(SourceVersion.version_no.desc())
+                    .first()
+                )
+                if remaining:
+                    source.current_version_id = remaining.id
+                else:
+                    db.delete(source)
+    db.delete(project)
+
+
+def process_deletion_request(
+    db: Session, ctx: RuntimeContext, settings: Settings, request: DeletionRequest
+) -> DeletionRequest:
+    if request.workspace_id != ctx.workspace_id:
+        raise GroundloomError("FORBIDDEN", "The deletion request is outside the workspace scope.", 403)
+    policy = ensure_retention_policy(db, ctx.workspace_id)
+    if policy.legal_hold:
+        request.status = "blocked"
+        request.error_code = "LEGAL_HOLD"
+        request.step_status = {**request.step_status, "legal_hold": "blocked"}
+        request.lease_owner = None
+        request.lease_until = None
+        audit(db, ctx, "retention.deletion.blocked", "deletion_request", request.id, "Deletion blocked by legal hold", "blocked")
+        db.commit()
+        return request
+    project = db.query(Project).filter_by(id=request.resource_id, workspace_id=ctx.workspace_id).first()
+    if not project:
+        request.status = "completed"
+        request.completed_at = utcnow()
+        request.step_status = {**request.step_status, "canonical": "completed", "objects": "completed", "checkpoints": "completed"}
+        request.lease_owner = None
+        request.lease_until = None
+        db.commit()
+        return request
+    source_versions = [
+        row
+        for config in db.query(ProjectConfigVersion).filter_by(project_id=project.id, workspace_id=ctx.workspace_id).all()
+        for row in db.query(SourceVersion).filter(SourceVersion.id.in_(config.source_version_ids or [])).all()
+    ]
+    export_keys = [
+        row.object_key
+        for row in db.query(ExportJob).filter_by(project_id=project.id, workspace_id=ctx.workspace_id).all()
+        if row.object_key
+    ]
+    object_keys = [row.object_key for row in source_versions] + export_keys
+    try:
+        store = build_object_store(settings)
+        for key in object_keys:
+            store.delete_bytes(key)
+        request.step_status = {**request.step_status, "objects": "completed"}
+        checkpoint_dir = (
+            settings.object_store_path / "workspaces" / ctx.workspace_id / "checkpoints" / project.id
+        ).resolve()
+        root = settings.object_store_path.resolve()
+        if root in checkpoint_dir.parents and checkpoint_dir.exists():
+            shutil.rmtree(checkpoint_dir)
+        request.step_status = {**request.step_status, "checkpoints": "completed"}
+        _delete_project_records(db, ctx, project)
+        request.step_status = {**request.step_status, "canonical": "completed"}
+        request.status = "completed"
+        request.completed_at = utcnow()
+        request.error_code = None
+        request.lease_owner = None
+        request.lease_until = None
+        audit(db, ctx, "retention.deletion.completed", "deletion_request", request.id, "Project deletion completed")
+        outbox(
+            db,
+            ctx.workspace_id,
+            "RetentionDeletionCompleted",
+            "deletion_request",
+            request.id,
+            {"request_id": request.id, "scope_type": request.scope_type},
+        )
+        db.commit()
+    except Exception as exc:
+        db.rollback()
+        failed = db.query(DeletionRequest).filter_by(id=request.id, workspace_id=ctx.workspace_id).one()
+        failed.status = "failed"
+        failed.error_code = exc.code if isinstance(exc, GroundloomError) else "DELETE_FAILED"
+        failed.lease_owner = None
+        failed.lease_until = None
+        audit(db, ctx, "retention.deletion.failed", "deletion_request", request.id, "Deletion workflow failed", "failure")
+        db.commit()
+    return db.query(DeletionRequest).filter_by(id=request.id, workspace_id=ctx.workspace_id).one()
+
+
+def run_deletion_worker_once(
+    db: Session, ctx: RuntimeContext, settings: Settings, worker_id: str, *, limit: int = 10
+) -> dict[str, int]:
+    claimed = claim_deletion_requests(db, ctx.workspace_id, worker_id, limit=limit)
+    completed = blocked = failed = 0
+    for request in claimed:
+        result = process_deletion_request(db, ctx, settings, request)
+        if result.status == "completed":
+            completed += 1
+        elif result.status == "blocked":
+            blocked += 1
+        elif result.status == "failed":
+            failed += 1
+    return {"claimed": len(claimed), "completed": completed, "blocked": blocked, "failed": failed}
 
 
 def render_content(title: str, blocks: list[ContentBlock], format: str) -> bytes:

@@ -21,3 +21,9 @@ POST     /exports                         GET /exports/{id}
 Use 400 invalid request, 401 unauthenticated, 403 authorized identity lacking action without existence leak, 404 accessible resource absent, 409 version/state/idempotency conflict, 422 domain validation, 429 budget/rate, 503 transient dependency. Error body follows `error-taxonomy.md`.
 
 Before implementation, generate an OpenAPI document and contract tests for every operation, auth case, error, pagination, idempotency, and example. The OpenAPI is generated/validated from code but reviewed against this specification.
+
+Export creation is idempotent and returns queued in staging/production;
+export_worker.py advances queued to rendering, storing, completed, or failed.
+The credential-free development adapter performs one inline worker pass unless
+GROUNDLOOM_EXPORT_INLINE_LOCAL=false. Project deletion always returns a
+durable pending request and is completed only by the retention worker.

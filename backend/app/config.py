@@ -41,6 +41,7 @@ class Settings(BaseSettings):
     max_upload_bytes: int = 25_000_000
     agent_max_attempts: int = 3
     agent_retry_backoff_seconds: float = 0.25
+    export_inline_local: bool | None = None
     event_retention_days: int = 90
     auth_secret: str | None = None
     auth_mode: str = "local"
@@ -68,6 +69,8 @@ class Settings(BaseSettings):
                 raise RuntimeError("Production requires an object storage bucket")
             if self.checkpoint_backend != "postgres":
                 raise RuntimeError("Production requires the Postgres checkpoint backend")
+            if self.export_inline_local is True:
+                raise RuntimeError("Production requires exports to run through the durable worker")
             if not self.auth_secret:
                 raise RuntimeError("Production requires auth encryption configuration")
             if len(self.auth_secret) < 32:

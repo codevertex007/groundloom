@@ -1,12 +1,13 @@
 from datetime import UTC, datetime
 
-from sqlalchemy import text
+from sqlalchemy import inspect, text
 from sqlalchemy.orm import Session
 
 from .db import Base, make_engine
 
 MIGRATION_ID = "001_initial_domain_schema"
 ADAPTERS_MIGRATION_ID = "002_ingestion_jobs_and_provider_adapters"
+RETENTION_EXPORT_MIGRATION_ID = "003_retention_deletion_and_export_leases"
 
 
 def apply_migrations(database_url: str) -> None:
@@ -20,7 +21,27 @@ def apply_migrations(database_url: str) -> None:
                 "CREATE TABLE IF NOT EXISTS schema_migrations (id VARCHAR(160) PRIMARY KEY, applied_at VARCHAR(64) NOT NULL)"
             )
         )
-        migration_ids = (MIGRATION_ID, ADAPTERS_MIGRATION_ID)
+        migration_ids: list[str] = [
+            MIGRATION_ID,
+            ADAPTERS_MIGRATION_ID,
+            RETENTION_EXPORT_MIGRATION_ID,
+        ]
+        # create_all creates new tables but does not add columns to a prior
+        # release. These additive columns are the only compatibility change in
+        # this migration and are safe before the worker is upgraded.
+        existing_export_columns = {
+            column["name"] for column in inspect(engine).get_columns("export_jobs")
+        }
+        timestamp_type = "TIMESTAMP WITH TIME ZONE" if engine.dialect.name == "postgresql" else "DATETIME"
+        for name, sql_type, default in (
+            ("attempts", "INTEGER", "0"),
+            ("lease_owner", "VARCHAR(120)", "NULL"),
+            ("lease_until", timestamp_type, "NULL"),
+        ):
+            if name not in existing_export_columns:
+                connection.execute(
+                    text(f"ALTER TABLE export_jobs ADD COLUMN {name} {sql_type} DEFAULT {default}")
+                )
         for migration_id in migration_ids:
             if database_url.startswith("sqlite"):
                 connection.execute(

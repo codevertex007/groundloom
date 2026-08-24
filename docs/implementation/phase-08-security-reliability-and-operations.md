@@ -13,3 +13,7 @@
 
 ## Exit gate
 No critical/high unresolved security finding; recovery and restore evidence exists; load meets declared envelope; operators can diagnose/recover without raw tenant access.
+
+Project deletion/retention is a durable local worker slice with legal-hold,
+object/checkpoint cleanup, audit, outbox, retry, and cross-scope tests. Workspace
+scheduling and production backup/trace lifecycle review remain release evidence.
