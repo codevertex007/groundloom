@@ -1110,6 +1110,14 @@ button {
 .copilot-head strong {
   font-size: 11px;
 }
+.run-status {
+  display: block;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 9px;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
 .live-dot {
   width: 7px;
   height: 7px;
@@ -1142,6 +1150,11 @@ button {
   font-size: 9px;
   color: var(--muted);
   margin-top: 4px;
+}
+.run-controls {
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
 }
 .approval-card {
   padding: 11px;

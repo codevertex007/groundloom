@@ -1,6 +1,7 @@
 import base64
 from pathlib import Path
 
+from app.auth import issue_context_token
 from app.config import Settings
 from app.main import create_app
 from fastapi.testclient import TestClient
@@ -132,6 +133,36 @@ def test_plan_approval_interrupt_resumes_same_run_and_thread(tmp_path):
     assert "approval.required" in event_types
     assert "approval.resolved" in event_types
     assert event_types.count("patch.proposed") == 1
+
+
+def test_queued_run_can_be_cancelled_and_replayed_without_resuming(tmp_path):
+    settings = Settings(
+        env="staging",
+        auth_mode="hmac",
+        auth_secret="staging-test-secret-that-is-long-enough",
+        database_url=f"sqlite:///{tmp_path / 'cancel.db'}",
+        object_store_path=tmp_path / "objects",
+        agent_inline_local=False,
+    )
+    api = TestClient(create_app(settings))
+    token = issue_context_token("local-user", "local-workspace", settings.auth_secret)
+    auth_headers = {"Authorization": f"Bearer {token}"}
+    project = api.post(
+        "/v1/projects",
+        headers=auth_headers,
+        json={"name": "Cancellable run", "project_type": "brief", "brief": "Cancel safely"},
+    ).json()
+    queued = api.post(
+        f"/v1/projects/{project['id']}/threads/messages",
+        headers={**auth_headers, "Idempotency-Key": "cancel-run-1"},
+        json={"text": "Queue this draft"},
+    )
+    assert queued.status_code == 202 and queued.json()["status"] == "queued"
+    run_id = queued.json()["id"]
+    cancelled = api.post(f"/v1/runs/{run_id}/cancel", headers=auth_headers)
+    assert cancelled.status_code == 200 and cancelled.json()["status"] == "cancelled"
+    replay = api.post(f"/v1/runs/{run_id}/cancel", headers=auth_headers)
+    assert replay.status_code == 200 and replay.json()["status"] == "cancelled"
 
 
 def test_workspace_preferences_are_typed_audited_pinned_and_idempotent(tmp_path):

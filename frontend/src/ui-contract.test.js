@@ -25,6 +25,9 @@ test("reference surfaces and connected mutations are present in the UI", () => {
     "/v1/workspace/preferences",
     "/v1/approvals/",
     "/v1/patches/",
+    "/v1/runs/",
+    "Cancel run",
+    "Resume run",
     "subscribeToEvents",
   ]) {
     assert.match(source, new RegExp(contract.replaceAll("/", "\\/")));
@@ -32,7 +35,7 @@ test("reference surfaces and connected mutations are present in the UI", () => {
 });
 
 test("interactive reference states expose keyboard and assistive semantics", () => {
-  assert.match(source, /role="dialog" aria-modal="true"/);
+  assert.match(source, /role="dialog"\s+aria-modal="true"/);
   assert.match(source, /role="alert"/);
   assert.match(source, /role="status"/);
   assert.match(source, /aria-label="Send message"/);

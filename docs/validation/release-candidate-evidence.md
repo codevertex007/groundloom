@@ -5,13 +5,13 @@ sign-off. It was refreshed on 2026-08-25 from the repository root.
 
 | Gate | Command/evidence | Result |
 |---|---|---|
-| Backend unit/contract/security | `python -m pytest -q -rA` | 37 passed; one optional-provider test skips when extras are absent |
+| Backend unit/contract/security | `python -m pytest -q -rA` | 38 passed; one optional-provider test skips when extras are absent |
 | Python lint | `python -m ruff check backend/app backend/tests backend/scripts` | Passed |
 | Python types | `python -m mypy backend/app backend/scripts` | Passed; 32 source files |
 | Documentation/traceability | `python backend/scripts/validate_docs.py` | Passed; refreshed through migration 010, worker health, budget, and provider outage contracts |
 | Frontend build | `cd frontend; npm run build` | Passed |
 | Frontend API/UI contract tests | `cd frontend; npm test` | 5 passed: typed retryable errors/correlation, SSE reconnect cursor/offline behavior, queued export polling, reference-surface/mutation presence, and interactive accessibility semantics |
-| Frontend E2E/accessibility | `cd frontend; npx playwright install chromium; npm run test:e2e` | 3 Playwright tests passed: real local backend/frontend startup, project → collaborator → proposal → accept, settings persistence, command-palette navigation, and axe serious/critical accessibility scan; committed visual baselines are intentionally not claimed |
+| Frontend E2E/accessibility | `cd frontend; npx playwright install chromium; npm run test:e2e` | 3 Playwright tests passed: real local backend/frontend startup, project → collaborator → proposal → accept with rendered run status, settings persistence, command-palette navigation, and axe serious/critical accessibility scan; committed visual baselines are intentionally not claimed |
 | Frontend dependency audit | `cd frontend; npm audit --omit=dev && npm audit --audit-level=high` | 0 vulnerabilities in production and development dependency trees |
 | Python environment audit | `python -m pip check` | Existing environment conflict: `streamlit 1.43.1` requires `protobuf<6`, installed environment has `protobuf 6.31.1`; unrelated to Groundloom's declared dependencies and should be resolved in a clean release environment. |
 | Optional provider API contract | Isolated probe venv with `.[agent,postgres,storage,observability]`; `pytest backend/tests/test_optional_provider_contracts.py -q` | Pinned packages installed cleanly; fake-model `CompiledStateGraph` compile passed; Langfuse adapter construction/flush was exercised against an intentionally unavailable endpoint and failed only as bounded telemetry export, not product state. |
