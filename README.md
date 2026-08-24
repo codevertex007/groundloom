@@ -82,6 +82,7 @@ python backend/scripts/export_worker.py
 python backend/scripts/retention_worker.py
 python backend/scripts/index_worker.py
 python backend/scripts/delegated_worker.py
+python backend/scripts/agent_worker.py --once
 
 # Optional disposable local recovery exercise
 cd ..
