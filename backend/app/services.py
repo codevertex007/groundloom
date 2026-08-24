@@ -14,6 +14,7 @@ from sqlalchemy import func
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .checkpoints import save_checkpoint
 from .config import Settings
 from .context import RuntimeContext
 from .db import set_tenant_context, set_worker_context
@@ -230,6 +231,43 @@ def append_event(
         {"event_id": event.id, "seq": event.seq, **payload},
     )
     return event
+
+
+def checkpoint_local_run(
+    settings: Settings | None,
+    ctx: RuntimeContext,
+    run: AgentRun,
+    phase: str,
+    details: dict[str, Any] | None = None,
+) -> None:
+    """Persist bounded local execution state without making it product state.
+
+    Production Deep Agents runs use the configured LangGraph Postgres
+    checkpointer. The local adapter still exercises the same durability seam so
+    a process restart does not leave local execution with no checkpoint at all.
+    Request/source text is intentionally excluded; the canonical run row and
+    source stores remain the authoritative inputs.
+    """
+    if settings is None or settings.checkpoint_backend != "local":
+        return
+    save_checkpoint(
+        settings,
+        ctx.workspace_id,
+        run.project_id,
+        run.thread_id,
+        {
+            "schema_version": 1,
+            "run_id": run.id,
+            "project_id": run.project_id,
+            "thread_id": run.thread_id,
+            "phase": phase,
+            "status": run.status,
+            "cancel_requested": run.cancel_requested,
+            "usage": run.usage_json,
+            "budget": run.budget_json,
+            "details": details or {},
+        },
+    )
 
 
 def seed_local(db: Session, settings: Settings) -> None:
@@ -595,6 +633,7 @@ def start_run(
         {"status": run.status, "request": request_text[:500]},
     )
     db.commit()
+    checkpoint_local_run(settings, ctx, run, "started")
     if not queue_for_worker:
         execute_agent_turn(db, ctx, run, settings)
     completed = db.get(AgentRun, run.id)
@@ -932,7 +971,9 @@ def execute_deep_agent_turn(
         "tool_calls": 0,
         "estimated_cost_usd": 0.0,
     }
+    checkpoint_local_run(settings, ctx, run, "executing", {"provider": settings.model_provider})
     if enforce_run_budget(db, ctx, run):
+        checkpoint_local_run(settings, ctx, run, "waiting_for_budget")
         return
     from .agent_runtime import build_agent_runtime
 
@@ -947,6 +988,7 @@ def execute_deep_agent_turn(
             run.status = "cancelled"
             append_event(db, ctx, run, "run.cancelled", {"status": "cancelled"})
             db.commit()
+            checkpoint_local_run(settings, ctx, run, "cancelled")
             return
         try:
             runtime = build_agent_runtime(settings.model_provider, settings)
@@ -970,6 +1012,7 @@ def execute_deep_agent_turn(
         )
         audit(db, ctx, "run.failed", "agent_run", run.id, "Deep Agents provider execution failed", "failure")
         db.commit()
+        checkpoint_local_run(settings, ctx, run, "failed", {"error_code": run.error_code})
         raise GroundloomError(
             "DEPENDENCY_UNAVAILABLE",
             "The configured agent provider could not complete the run.",
@@ -1005,6 +1048,7 @@ def execute_deep_agent_turn(
     )
     audit(db, ctx, "run.completed", "agent_run", run.id, "Completed Deep Agents project turn")
     db.commit()
+    checkpoint_local_run(settings, ctx, run, "completed", {"provider": settings.model_provider})
 
 
 def execute_agent_turn(
@@ -1014,7 +1058,7 @@ def execute_agent_turn(
         execute_deep_agent_turn(db, ctx, run, settings)
         return
     if run.pinned_config_json.get("approved_outline_id"):
-        _complete_approved_plan(db, ctx, run)
+        _complete_approved_plan(db, ctx, run, settings)
         return
     project = _project(db, ctx, run.project_id)
     text = run.request_text.lower()
@@ -1028,12 +1072,15 @@ def execute_agent_turn(
     is_initialization = (
         "initialize" in text or "initialized" in text or "hello" in text
     )
+    checkpoint_local_run(settings, ctx, run, "executing")
     if not is_initialization and enforce_run_budget(db, ctx, run):
+        checkpoint_local_run(settings, ctx, run, "waiting_for_budget")
         return
     if run.cancel_requested:
         run.status = "cancelled"
         append_event(db, ctx, run, "run.cancelled", {"status": "cancelled"})
         db.commit()
+        checkpoint_local_run(settings, ctx, run, "cancelled")
         return
     if is_initialization:
         add_todo(
@@ -1050,6 +1097,7 @@ def execute_agent_turn(
         run.usage_json = {**run.usage_json, "output_tokens": 8, "estimated_cost_usd": 0.00001}
         audit(db, ctx, "run.completed", "agent_run", run.id, "Initialized primary project thread")
         db.commit()
+        checkpoint_local_run(settings, ctx, run, "completed", {"initialization": True})
         return
     add_todo(db, ctx, run, "Understand the request and inspect project state", "completed", 0)
     evidence = search_evidence(db, ctx, project.id, run.request_text, limit=8)
@@ -1068,6 +1116,7 @@ def execute_agent_turn(
     )
     run.usage_json = {**run.usage_json, "tool_calls": 1}
     if enforce_run_budget(db, ctx, run):
+        checkpoint_local_run(settings, ctx, run, "waiting_for_budget", {"tool": "search_source_passages"})
         return
     wants_draft = any(word in text for word in ("draft", "generate", "outline", "write", "create"))
     if not wants_draft:
@@ -1094,6 +1143,7 @@ def execute_agent_turn(
         run.status = "completed"
         run.usage_json = {**run.usage_json, "output_tokens": max(1, len(answer) // 4), "estimated_cost_usd": 0.00002}
         db.commit()
+        checkpoint_local_run(settings, ctx, run, "completed", {"response": "grounded_answer"})
         return
     add_todo(db, ctx, run, "Propose a reviewable outline", "in_progress", 1)
     outline_items = [
@@ -1203,6 +1253,7 @@ def execute_agent_turn(
         )
         audit(db, ctx, "approval.required", "approval_request", approval.id, "Plan approval requested")
         db.commit()
+        checkpoint_local_run(settings, ctx, run, "waiting_for_approval", {"approval_id": approval.id})
         return
     append_event(
         db, ctx, run, "plan.proposed", {"outline_version_id": outline.id, "items": outline_items}
@@ -1290,9 +1341,12 @@ def execute_agent_turn(
         "Produced adaptive outline and content proposal",
     )
     db.commit()
+    checkpoint_local_run(settings, ctx, run, "completed", {"patch_id": patch.id, "outline_version_id": outline.id})
 
 
-def _complete_approved_plan(db: Session, ctx: RuntimeContext, run: AgentRun) -> None:
+def _complete_approved_plan(
+    db: Session, ctx: RuntimeContext, run: AgentRun, settings: Settings | None = None
+) -> None:
     """Continue the same local primary-agent run after a plan approval interrupt."""
     project = _project(db, ctx, run.project_id)
     evidence = search_evidence(db, ctx, project.id, run.request_text, limit=8)
@@ -1332,6 +1386,7 @@ def _complete_approved_plan(db: Session, ctx: RuntimeContext, run: AgentRun) -> 
     run.usage_json = {**run.usage_json, "output_tokens": max(1, len(project.brief) // 4), "tool_calls": 1, "estimated_cost_usd": 0.00005}
     audit(db, ctx, "run.completed", "agent_run", run.id, "Resumed approved plan and produced content proposal")
     db.commit()
+    checkpoint_local_run(settings, ctx, run, "completed", {"patch_id": patch.id, "approved_outline": True})
 
 
 def retry_delegated_task(db: Session, ctx: RuntimeContext, task_id: str) -> DelegatedTask:

@@ -20,3 +20,17 @@ than optional agent work: it does not consume the project’s optional work
 budget, so a newly created project with a deliberately small budget can still
 accept its first user turn. Normal user turns remain subject to per-run and
 workspace budget enforcement.
+
+The local deterministic adapter writes a bounded, workspace/project/thread
+scoped JSON checkpoint at run start and terminal/interruption boundaries. It
+contains execution metadata only; request/source text and canonical content do
+not move into checkpoints. Production Deep Agents uses the configured
+LangGraph Postgres checkpointer instead.
+
+The configured Deep Agents runtime uses the same project-bound service context
+for snapshot, selected-source retrieval/passage reads, typed content reads,
+approved memory, pinned skill metadata, deterministic validation, and
+proposal-only patch tools. Its built-in delegation path is limited to named
+`source-researcher`, `citation-auditor`, and `module-writer` specialists; shell,
+filesystem, SQL, network, credential, and arbitrary object-storage tools are
+excluded by the provider harness profile.

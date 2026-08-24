@@ -5,7 +5,7 @@ sign-off. It was refreshed on 2026-08-25 from the repository root.
 
 | Gate | Command/evidence | Result |
 |---|---|---|
-| Backend unit/contract/security | `python -m pytest backend/tests -q -rA` | 40 passed; one optional-provider test skips when extras are absent |
+| Backend unit/contract/security | `python -m pytest backend/tests -q -rA` | 41 passed; two optional-provider tests skip when extras are absent in the default local environment; both pass in the isolated pinned-provider probe |
 | Python lint | `python -m ruff check backend/app backend/tests backend/scripts` | Passed |
 | Python types | `python -m mypy backend/app backend/scripts` | Passed; 32 source files |
 | Documentation/traceability | `python backend/scripts/validate_docs.py` | Passed; refreshed through migration 012, serialized active-turn, worker health, budget, provider outage, and tenant-RLS contracts |
@@ -14,7 +14,7 @@ sign-off. It was refreshed on 2026-08-25 from the repository root.
 | Frontend E2E/accessibility | `cd frontend; npx playwright install chromium; npm run test:e2e` | 4 Playwright tests passed: real local backend/frontend startup, project → collaborator → proposal → accept with rendered run status, settings persistence, command-palette navigation, source upload/readiness and project evidence selection, citation-panel navigation, and axe serious/critical accessibility scan; committed visual baselines are intentionally not claimed |
 | Frontend dependency audit | `cd frontend; npm audit --omit=dev && npm audit --audit-level=high` | 0 vulnerabilities in production and development dependency trees |
 | Python environment audit | `python -m pip check` | Existing environment conflict: `streamlit 1.43.1` requires `protobuf<6`, installed environment has `protobuf 6.31.1`; unrelated to Groundloom's declared dependencies and should be resolved in a clean release environment. |
-| Optional provider API contract | Isolated probe venv with `.[agent,postgres,storage,observability]`; `pytest backend/tests/test_optional_provider_contracts.py -q` | Pinned packages installed cleanly; fake-model `CompiledStateGraph` compile passed; Langfuse adapter construction/flush was exercised against an intentionally unavailable endpoint and failed only as bounded telemetry export, not product state. |
+| Optional provider API contract | Isolated probe venv with `.[agent,postgres,storage,observability]`; `pytest backend/tests/test_optional_provider_contracts.py -q` | Pinned packages installed cleanly; fake-model `CompiledStateGraph` compile passed for a bounded specialist subagent, and the Groundloom runtime factory compiled its scoped tool/subagent harness without provider credentials; Langfuse adapter construction/flush was exercised against an intentionally unavailable endpoint and failed only as bounded telemetry export, not product state. |
 | Deterministic evaluation | `python backend/scripts/run_evals.py` | 1 pass / 1 intentional needs-revision regression case; redacted `evaluation.completed` observation emitted |
 | Retrieval envelope | `python backend/scripts/benchmark_local.py --requests 20` | SQLite/filesystem adapter: p50 9.544 ms, p95 46.369 ms, max 46.369 ms; not a production SLO |
 | Migration | `python backend/scripts/migrate.py`, `python backend/scripts/verify_migrations.py`, and migration status query | `001_initial_domain_schema` through `012_active_agent_turn_uniqueness` verified locally; PostgreSQL policy application/role separation remains a live deployment gate |

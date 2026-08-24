@@ -82,6 +82,36 @@ def test_checkpoint_scope_and_redacted_telemetry(tmp_path):
     assert telemetry.records[0]["attributes"]["nested"]["password"] == "[REDACTED]"
 
 
+def test_local_agent_writes_bounded_run_checkpoint(tmp_path):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'checkpoint-run.db'}",
+        object_store_path=tmp_path / "objects",
+    )
+    api = TestClient(create_app(settings))
+    project = api.post(
+        "/v1/projects",
+        headers={"X-User-ID": "local-user", "X-Workspace-ID": "local-workspace"},
+        json={"name": "Checkpointed", "project_type": "brief", "brief": "Checkpoint state"},
+    ).json()
+    response = api.post(
+        f"/v1/projects/{project['id']}/threads/messages",
+        headers={"X-User-ID": "local-user", "X-Workspace-ID": "local-workspace"},
+        json={"text": "Answer from the project state"},
+    )
+    assert response.status_code == 202
+    detail = api.get(
+        f"/v1/projects/{project['id']}",
+        headers={"X-User-ID": "local-user", "X-Workspace-ID": "local-workspace"},
+    ).json()
+    checkpoint = load_checkpoint(
+        settings, "local-workspace", project["id"], detail["thread_id"]
+    )
+    assert checkpoint is not None
+    assert checkpoint["run_id"] == response.json()["id"]
+    assert checkpoint["status"] == "completed"
+    assert "request_text" not in checkpoint
+
+
 def test_outbox_delivery_marks_only_successful_messages(tmp_path):
     settings = Settings(database_url=f"sqlite:///{tmp_path / 'outbox.db'}")
     init_database(settings.database_url)
