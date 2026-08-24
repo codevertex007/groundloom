@@ -12,7 +12,7 @@ sign-off. It was refreshed on 2026-08-25 from the repository root.
 | Frontend build | `cd frontend; npm run build` | Passed |
 | Frontend dependency audit | `cd frontend; npm audit --omit=dev` | 0 vulnerabilities |
 | Python environment audit | `python -m pip check` | Existing environment conflict: `streamlit 1.43.1` requires `protobuf<6`, installed environment has `protobuf 6.31.1`; unrelated to Groundloom's declared dependencies and should be resolved in a clean release environment. |
-| Optional provider API contract | Isolated probe venv with `.[agent,postgres,storage,observability]`; fake-model Deep Agents graph compile | Pinned packages installed cleanly; `CompiledStateGraph` compile passed without provider credentials. |
+| Optional provider API contract | Isolated probe venv with `.[agent,postgres,storage,observability]`; `pytest backend/tests/test_optional_provider_contracts.py -q` | Pinned packages installed cleanly; fake-model `CompiledStateGraph` compile passed; Langfuse adapter construction/flush was exercised against an intentionally unavailable endpoint and failed only as bounded telemetry export, not product state. |
 | Deterministic evaluation | `python backend/scripts/run_evals.py` | 1 pass / 1 intentional needs-revision regression case; redacted `evaluation.completed` observation emitted |
 | Retrieval envelope | `python backend/scripts/benchmark_local.py --requests 20` | Synthetic SQLite/filesystem p50/p95 emitted; not a production SLO |
 | Migration | `python backend/scripts/migrate.py`, `python backend/scripts/verify_migrations.py`, and migration status query | `001_initial_domain_schema`, `002_ingestion_jobs_and_provider_adapters` |
@@ -27,3 +27,7 @@ container sandboxing, staging soak/rollback, and release-owner approval require
 external services or credentials. The application fails clearly or rejects
 unsafe production configuration when these are absent; no local result is
 represented as production evidence.
+
+The Docker CLI is installed, but the Docker Desktop Linux daemon was not
+reachable during this run (`docker compose up -d` could not connect to the
+named pipe), so the disposable Postgres/MinIO compose services were not started.
