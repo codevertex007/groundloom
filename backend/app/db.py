@@ -1,13 +1,56 @@
 from collections.abc import Generator
 from pathlib import Path
 
-from sqlalchemy import create_engine
+from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
 
 class Base(DeclarativeBase):
     pass
+
+
+def set_tenant_context(session: Session, workspace_id: str) -> None:
+    """Bind the trusted workspace to this session and its current transaction.
+
+    PostgreSQL RLS policies read ``app.workspace_id`` with ``current_setting``.
+    The setting is transaction-local, so the session event below reapplies it
+    whenever SQLAlchemy starts a new transaction after an application commit.
+    SQLite keeps the trusted value in ``Session.info`` but does not execute the
+    PostgreSQL-only statement.
+    """
+    session.info["workspace_id"] = workspace_id
+    if session.get_bind().dialect.name == "postgresql" and session.in_transaction():
+        session.execute(
+            text("SELECT set_config('app.workspace_id', :workspace_id, true)"),
+            {"workspace_id": workspace_id},
+        )
+
+
+def set_worker_context(session: Session) -> None:
+    """Mark a trusted leased-worker session for cross-workspace queue claims."""
+    session.info.pop("workspace_id", None)
+    session.info["service_role"] = "worker"
+    if session.get_bind().dialect.name == "postgresql" and session.in_transaction():
+        session.execute(
+            text("SELECT set_config('app.service_role', 'worker', true)")
+        )
+
+
+@event.listens_for(Session, "after_begin")
+def _apply_tenant_context(session: Session, _transaction, connection) -> None:
+    workspace_id = session.info.get("workspace_id")
+    service_role = session.info.get("service_role")
+    if workspace_id and connection.dialect.name == "postgresql":
+        connection.execute(
+            text("SELECT set_config('app.workspace_id', :workspace_id, true)"),
+            {"workspace_id": workspace_id},
+        )
+    if service_role and connection.dialect.name == "postgresql":
+        connection.execute(
+            text("SELECT set_config('app.service_role', :service_role, true)"),
+            {"service_role": service_role},
+        )
 
 
 def make_engine(database_url: str):

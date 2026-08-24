@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from .config import Settings
 from .context import RuntimeContext
+from .db import set_tenant_context, set_worker_context
 from .errors import GroundloomError
 from .ids import new_id
 from .models import (
@@ -231,6 +232,7 @@ def append_event(
 
 
 def seed_local(db: Session, settings: Settings) -> None:
+    set_tenant_context(db, settings.local_workspace_id)
     workspace = db.get(Workspace, settings.local_workspace_id)
     if not workspace:
         workspace = Workspace(id=settings.local_workspace_id, name=settings.local_workspace_name)
@@ -590,6 +592,7 @@ def claim_agent_runs(
 def run_agent_worker_once(
     db: Session, settings: Settings, worker_id: str, *, limit: int = 10
 ) -> dict[str, int]:
+    set_worker_context(db)
     touch_worker_heartbeat(db, worker_id, "agent", status="healthy", details={"limit": limit})
     db.commit()
     claimed = claim_agent_runs(
@@ -1411,6 +1414,7 @@ def process_delegated_task(
 def run_delegated_worker_once(
     db: Session, ctx: RuntimeContext, worker_id: str, *, limit: int = 10
 ) -> dict[str, int]:
+    set_tenant_context(db, ctx.workspace_id)
     touch_worker_heartbeat(db, worker_id, "delegated", ctx.workspace_id, details={"limit": limit})
     db.commit()
     claimed = claim_delegated_tasks(db, ctx.workspace_id, worker_id, limit=limit)
@@ -1740,6 +1744,7 @@ def run_ingestion_worker_once(
     *,
     limit: int = 10,
 ) -> dict[str, int]:
+    set_tenant_context(db, ctx.workspace_id)
     touch_worker_heartbeat(db, worker_id, "ingestion", ctx.workspace_id, details={"limit": limit})
     db.commit()
     claimed = claim_ingestion_jobs(db, ctx.workspace_id, worker_id, limit=limit)
@@ -1908,6 +1913,7 @@ def process_index_rebuild_job(
 def run_index_rebuild_worker_once(
     db: Session, ctx: RuntimeContext, worker_id: str, *, limit: int = 10
 ) -> dict[str, int]:
+    set_tenant_context(db, ctx.workspace_id)
     touch_worker_heartbeat(db, worker_id, "index", ctx.workspace_id, details={"limit": limit})
     db.commit()
     claimed = claim_index_rebuild_jobs(db, ctx.workspace_id, worker_id, limit=limit)
@@ -2808,6 +2814,7 @@ def run_export_worker_once(
     *,
     limit: int = 10,
 ) -> dict[str, int]:
+    set_tenant_context(db, ctx.workspace_id)
     touch_worker_heartbeat(db, worker_id, "export", ctx.workspace_id, details={"limit": limit})
     db.commit()
     claimed = claim_export_jobs(db, ctx.workspace_id, worker_id, limit=limit)
@@ -3220,6 +3227,7 @@ def process_deletion_request(
 def run_deletion_worker_once(
     db: Session, ctx: RuntimeContext, settings: Settings, worker_id: str, *, limit: int = 10
 ) -> dict[str, int]:
+    set_tenant_context(db, ctx.workspace_id)
     touch_worker_heartbeat(db, worker_id, "retention", ctx.workspace_id, details={"limit": limit})
     db.commit()
     claimed = claim_deletion_requests(db, ctx.workspace_id, worker_id, limit=limit)

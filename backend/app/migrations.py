@@ -15,6 +15,58 @@ WORKSPACE_PREFERENCES_MIGRATION_ID = "007_workspace_preferences"
 AGENT_RUN_WORKER_MIGRATION_ID = "008_agent_run_workers"
 WORKER_HEARTBEAT_MIGRATION_ID = "009_worker_heartbeats"
 BUDGET_CONTROLS_MIGRATION_ID = "010_budget_controls"
+POSTGRES_RLS_MIGRATION_ID = "011_postgres_rls_tenant_isolation"
+
+_RLS_WORKSPACE_TABLES = (
+    "workspace_preferences",
+    "projects",
+    "project_config_versions",
+    "sources",
+    "source_versions",
+    "ingestion_jobs",
+    "index_rebuild_jobs",
+    "source_blocks",
+    "source_chunks",
+    "skills",
+    "skill_versions",
+    "agent_threads",
+    "agent_runs",
+    "approval_requests",
+    "public_events",
+    "todos",
+    "outline_versions",
+    "content_versions",
+    "content_blocks",
+    "patches",
+    "validation_runs",
+    "validation_findings",
+    "export_jobs",
+    "retention_policies",
+    "deletion_requests",
+    "idempotency_records",
+    "memory_items",
+    "delegated_tasks",
+)
+
+
+def _apply_postgres_rls(connection) -> None:
+    """Install defense-in-depth policies for every workspace-scoped table."""
+    for table in _RLS_WORKSPACE_TABLES:
+        connection.exec_driver_sql(f"ALTER TABLE {table} ENABLE ROW LEVEL SECURITY")
+        connection.exec_driver_sql(f"ALTER TABLE {table} FORCE ROW LEVEL SECURITY")
+        connection.exec_driver_sql(
+            f"DROP POLICY IF EXISTS groundloom_workspace_isolation ON {table}"
+        )
+        predicate = (
+            "workspace_id IS NULL OR workspace_id = current_setting('app.workspace_id', true)"
+            if table in {"skills", "skill_versions"}
+            else "workspace_id = current_setting('app.workspace_id', true)"
+        )
+        connection.exec_driver_sql(
+            f"CREATE POLICY groundloom_workspace_isolation ON {table} "
+            f"USING ((current_setting('app.service_role', true) = 'worker') OR ({predicate})) "
+            f"WITH CHECK ((current_setting('app.service_role', true) = 'worker') OR ({predicate}))"
+        )
 
 
 def apply_migrations(database_url: str) -> None:
@@ -39,6 +91,7 @@ def apply_migrations(database_url: str) -> None:
             AGENT_RUN_WORKER_MIGRATION_ID,
             WORKER_HEARTBEAT_MIGRATION_ID,
             BUDGET_CONTROLS_MIGRATION_ID,
+            POSTGRES_RLS_MIGRATION_ID,
         ]
         preference_columns = {
             column["name"] for column in inspect(engine).get_columns("workspace_preferences")
@@ -110,6 +163,8 @@ def apply_migrations(database_url: str) -> None:
                     ),
                     {"id": migration_id, "at": datetime.now(UTC).isoformat()},
                 )
+        if engine.dialect.name == "postgresql":
+            _apply_postgres_rls(connection)
     engine.dispose(close=True)
 
 

@@ -28,4 +28,8 @@ OIDC/JWT implementation at the same boundary; raw identity headers are ignored
 in those environments.
 Production also requires a 32-character auth secret, HTTPS public URL,
 non-local CORS origins, and complete Langfuse credentials when Langfuse is
-selected.
+selected. Production PostgreSQL migrations install forced workspace RLS;
+application requests set `app.workspace_id` transaction-locally after trusted
+membership resolution, and leased workers use a separate bounded service
+context for cross-workspace queue claims. The production database role must
+not be the policy-bypassing owner.

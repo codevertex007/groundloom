@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 
 from .auth import verify_context_token
 from .config import Settings
+from .db import set_tenant_context
 from .errors import GroundloomError
 from .models import Membership
 
@@ -36,6 +37,7 @@ def resolve_context(
     membership = db.query(Membership).filter_by(user_id=uid, workspace_id=wid, active=True).first()
     if not membership:
         raise GroundloomError("PERMISSION_DENIED", "The workspace is unavailable.", 403)
+    set_tenant_context(db, wid)
     return RuntimeContext(uid, wid, frozenset({membership.role}), correlation_id or "corr_local")
 
 
