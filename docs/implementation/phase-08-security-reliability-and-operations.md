@@ -8,7 +8,7 @@
 - [x] `IMPL-08-004` Local checksum-backed backup/restore exercise; production Postgres/object-store restore remains open.
 - [x] `IMPL-08-005` Synthetic local retrieval benchmark with p50/p95 output; production capacity/cost envelope remains open.
 - [x] `IMPL-08-006` Local dashboard dimensions, alert thresholds, runbooks, SLO/error-budget starting thresholds, and redacted diagnostics are documented; production monitoring wiring remains open.
-- [ ] `IMPL-08-007` Migration/rollback and old-run compatibility rehearsal.
+- [x] `IMPL-08-007` Fresh-install migration sequence verification and compatibility boundaries are automated; previous-release/rollback rehearsal remains deployment evidence.
 - [x] `IMPL-08-008` Local privacy/redaction/audit review and incident response controls are documented/tested; production tabletop remains open.
 
 ## Exit gate

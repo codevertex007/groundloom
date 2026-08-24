@@ -17,6 +17,9 @@ jobs:
       - run: python -m mypy backend/app --ignore-missing-imports
       - run: python -m pytest backend/tests -q
       - run: python backend/scripts/validate_docs.py
+      - run: python backend/scripts/verify_migrations.py
+      - run: python backend/scripts/run_evals.py
+      - run: PYTHONPATH=backend python backend/scripts/benchmark_local.py --requests 20
   frontend:
     runs-on: ubuntu-latest
     defaults:
@@ -31,4 +34,4 @@ jobs:
           cache-dependency-path: frontend/package-lock.json
       - run: npm ci
       - run: npm run build
-
+      - run: npm audit --omit=dev

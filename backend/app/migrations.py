@@ -36,6 +36,7 @@ def apply_migrations(database_url: str) -> None:
                     ),
                     {"id": migration_id, "at": datetime.now(UTC).isoformat()},
                 )
+    engine.dispose(close=True)
 
 
 def migration_status(db: Session) -> list[str]:
