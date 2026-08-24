@@ -25,7 +25,9 @@ The local deterministic adapter writes a bounded, workspace/project/thread
 scoped JSON checkpoint at run start and terminal/interruption boundaries. It
 contains execution metadata only; request/source text and canonical content do
 not move into checkpoints. Production Deep Agents uses the configured
-LangGraph Postgres checkpointer instead.
+LangGraph Postgres checkpointer through `GROUNDLOOM_WORKER_DATABASE_URL`; its
+tables are initialized by the dedicated migrator process, not by API or worker
+runtime startup.
 
 The configured Deep Agents runtime uses the same project-bound service context
 for snapshot, selected-source retrieval/passage reads, typed content reads,

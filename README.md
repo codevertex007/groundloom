@@ -65,12 +65,19 @@ npm run dev
 
 Open `http://127.0.0.1:5173`. The default local identity is `local-user` in `local-workspace`; production mode rejects SQLite, the deterministic model provider, wildcard CORS, and missing auth configuration. Postgres/pgvector and MinIO can be started with `docker compose up -d` for deployment-shaped local testing.
 
+For a production-shaped PostgreSQL deployment, set
+`GROUNDLOOM_DATABASE_URL` to the application role,
+`GROUNDLOOM_WORKER_DATABASE_URL` to `groundloom_worker`, and
+`GROUNDLOOM_MIGRATION_DATABASE_URL` to `groundloom_migrator`. Run migrations
+before starting the API or workers; runtime processes do not create tables or
+apply schema changes in production.
+
 Validation commands:
 
 ```powershell
 python -m pytest backend/tests -q
-python -m ruff check backend/app backend/tests
-python -m mypy backend/app --ignore-missing-imports
+python -m ruff check backend/app backend/tests backend/scripts
+python -m mypy backend/app backend/scripts --ignore-missing-imports
 python backend/scripts/validate_docs.py
 cd frontend; npm run build
 cd frontend; npm run test:components

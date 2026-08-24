@@ -12,8 +12,10 @@ remain readable across authorized workspaces. The API role is tenant-bound;
 leased workers connect through the separate `groundloom_worker` database role
 configured by `GROUNDLOOM_WORKER_DATABASE_URL` for cross-workspace queue claims,
 while each worker still scopes processing, mutations, and audit records to the
-run's workspace. The transaction-local service marker remains metadata and is
-not the RLS bypass authority.
+run's workspace. Schema migration and policy ownership use the separate
+`groundloom_migrator` role configured by `GROUNDLOOM_MIGRATION_DATABASE_URL`.
+The transaction-local service marker remains metadata and is not the RLS bypass
+authority.
 
 The API derives the workspace only after trusted identity and membership
 resolution, then sets the tenant context on the SQLAlchemy session. A session

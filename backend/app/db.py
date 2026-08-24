@@ -5,6 +5,8 @@ from sqlalchemy import create_engine, event, text
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
 from sqlalchemy.pool import StaticPool
 
+from .config import Settings
+
 
 class Base(DeclarativeBase):
     pass
@@ -80,6 +82,24 @@ def init_database(database_url: str):
     engine = make_engine(database_url)
     Base.metadata.create_all(engine)
     return engine
+
+
+def prepare_worker_database(settings: Settings):
+    """Build a worker session factory without production DDL or migrations.
+
+    Local SQLite workers bootstrap their disposable database for convenience.
+    Staging and production workers connect through the dedicated worker role;
+    schema changes are applied by the migration process, never by a worker.
+    """
+    worker_url = settings.worker_database_url or settings.database_url
+    if worker_url.startswith("sqlite"):
+        from .migrations import apply_migrations
+
+        apply_migrations(worker_url)
+        engine = init_database(worker_url)
+    else:
+        engine = make_engine(worker_url)
+    return worker_url, engine, build_session_factory(worker_url, engine)
 
 
 def session_scope(factory) -> Generator[Session, None, None]:

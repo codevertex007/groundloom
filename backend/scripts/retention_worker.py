@@ -2,16 +2,13 @@
 
 from app.config import get_settings
 from app.context import RuntimeContext
-from app.db import build_session_factory, init_database
-from app.migrations import apply_migrations
+from app.db import prepare_worker_database
 from app.services import run_deletion_worker_once
 
 
 def main() -> None:
     settings = get_settings()
-    apply_migrations(settings.database_url)
-    engine = init_database(settings.database_url)
-    factory = build_session_factory(settings.database_url, engine)
+    _worker_database_url, engine, factory = prepare_worker_database(settings)
     ctx = RuntimeContext(
         settings.local_user_id,
         settings.local_workspace_id,

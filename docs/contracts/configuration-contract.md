@@ -33,5 +33,9 @@ application requests set `app.workspace_id` transaction-locally after trusted
 membership resolution. Leased workers use
 `GROUNDLOOM_WORKER_DATABASE_URL` with the dedicated `groundloom_worker`
 PostgreSQL role for cross-workspace queue claims; the API URL must use a
-different non-owner role. The transaction-local service marker is metadata only,
-and the production database role must not be the policy-bypassing owner.
+different non-owner role. `GROUNDLOOM_MIGRATION_DATABASE_URL` must use the
+separate `groundloom_migrator` role for schema ownership and RLS installation;
+the migration process also initializes the LangGraph checkpoint schema, while
+the API and worker roles receive runtime DML privileges only. The
+transaction-local service marker is metadata only, and the production API role
+must not be the policy-bypassing owner.

@@ -92,6 +92,7 @@ def test_production_requires_postgres_checkpoint_and_s3_storage():
         env="production",
         database_url="postgresql+psycopg://groundloom:password@localhost/groundloom",
         worker_database_url="postgresql+psycopg://groundloom_worker:password@localhost/groundloom",
+        migration_database_url="postgresql+psycopg://groundloom_migrator:password@localhost/groundloom",
         model_provider="openai",
         telemetry_provider="langfuse",
         object_store_backend="s3",
@@ -115,6 +116,7 @@ def test_production_rejects_weak_identity_and_local_domains():
         env="production",
         database_url="postgresql+psycopg://groundloom:password@localhost/groundloom",
         worker_database_url="postgresql+psycopg://groundloom_worker:password@localhost/groundloom",
+        migration_database_url="postgresql+psycopg://groundloom_migrator:password@localhost/groundloom",
         model_provider="openai",
         telemetry_provider="langfuse",
         object_store_backend="s3",
@@ -134,6 +136,7 @@ def test_production_requires_distinct_worker_database_role():
         env="production",
         database_url="postgresql+psycopg://groundloom:password@localhost/groundloom",
         worker_database_url="postgresql+psycopg://groundloom:password@localhost/groundloom",
+        migration_database_url="postgresql+psycopg://groundloom_migrator:password@localhost/groundloom",
         model_provider="openai",
         telemetry_provider="langfuse",
         object_store_backend="s3",
@@ -150,6 +153,50 @@ def test_production_requires_distinct_worker_database_role():
     )
     with pytest.raises(RuntimeError, match="groundloom_worker role"):
         settings.validate_runtime()
+
+
+def test_production_requires_distinct_migration_database_role():
+    settings = Settings(
+        env="production",
+        database_url="postgresql+psycopg://groundloom:password@localhost/groundloom",
+        worker_database_url="postgresql+psycopg://groundloom_worker:password@localhost/groundloom",
+        migration_database_url="postgresql+psycopg://groundloom:password@localhost/groundloom",
+        model_provider="openai",
+        telemetry_provider="langfuse",
+        object_store_backend="s3",
+        object_store_bucket="groundloom",
+        checkpoint_backend="postgres",
+        auth_secret="local-test-secret-that-is-at-least-32-chars",
+        auth_mode="hmac",
+        public_base_url="https://groundloom.example",
+        cors_origins=["https://app.groundloom.example"],
+        langfuse_public_key="pk-test",
+        langfuse_secret_key="sk-test",
+        langfuse_host="https://langfuse.example",
+        agent_inline_local=False,
+    )
+    with pytest.raises(RuntimeError, match="groundloom_migrator role"):
+        settings.validate_runtime()
+
+
+def test_postgres_staging_requires_runtime_role_split():
+    settings = Settings(
+        env="staging",
+        database_url="postgresql+psycopg://groundloom_api:password@localhost/groundloom",
+    )
+    with pytest.raises(RuntimeError, match="separate worker database URL"):
+        settings.validate_runtime()
+
+
+def test_postgres_checkpoint_provider_uses_worker_connection():
+    settings = Settings(
+        checkpoint_backend="postgres",
+        database_url="postgresql+psycopg://groundloom:password@localhost/groundloom",
+        worker_database_url="postgresql+psycopg://groundloom_worker:password@localhost/groundloom",
+    )
+    provider = build_checkpoint_provider(settings)
+    assert provider is not None
+    assert provider.database_url == "postgresql://groundloom_worker:password@localhost/groundloom"
 
 
 def test_upload_creates_completed_ingestion_job(tmp_path: Path):

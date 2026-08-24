@@ -3,12 +3,18 @@ services:
     image: pgvector/pgvector:pg16
     environment:
       POSTGRES_DB: groundloom
-      POSTGRES_USER: groundloom
+      POSTGRES_USER: groundloom_admin
       POSTGRES_PASSWORD: groundloom-local-only
     ports:
       - "5432:5432"
     volumes:
       - groundloom-postgres:/var/lib/postgresql/data
+      - ./docker/postgres-init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U groundloom_admin -d groundloom"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
   minio:
     image: minio/minio:latest
     command: server /data --console-address ":9001"
@@ -20,7 +26,20 @@ services:
       - "9001:9001"
     volumes:
       - groundloom-minio:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:9000/minio/health/live || exit 1"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+  minio-init:
+    image: minio/mc:latest
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: ["/bin/sh", "-c"]
+    command: >-
+      mc alias set local http://minio:9000 groundloom groundloom-local-only
+      && mc mb --ignore-existing local/groundloom
 volumes:
   groundloom-postgres:
   groundloom-minio:
-

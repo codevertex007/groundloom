@@ -2,7 +2,12 @@
 
 Environments: local, test, staging, production. Configuration is environment supplied and validated at startup; secrets use the deployment secret manager. Images/build artifacts are immutable and tagged by release SHA.
 
-Deploy order: compatible database migration → backend/workers → frontend; destructive schema cleanup occurs only after compatibility windows. Agent dependency/prompt/tool changes are versioned so in-flight runs can resume against compatible definitions or fail with a clear migration policy.
+Deploy order: compatible database migration (using the dedicated migrator role)
+→ backend/workers → frontend; destructive schema cleanup occurs only after
+compatibility windows. The API uses the application role and all durable workers
+use the dedicated worker role. Agent dependency/prompt/tool changes are
+versioned so in-flight runs can resume against compatible definitions or fail
+with a clear migration policy.
 
 Health endpoints distinguish liveness, readiness, database/checkpointer access, worker heartbeat, queue age, object storage, and optional provider degradation. Model/provider outage should preserve read/review/export of existing content where possible.
 

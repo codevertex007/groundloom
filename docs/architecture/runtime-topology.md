@@ -14,8 +14,10 @@ The code begins as a modular monolith with shared domain packages and separate p
 
 Agent/API processes MUST be horizontally safe: no correctness depends on process memory. Job claiming uses durable leases; SSE uses persisted events; checkpoint resume may occur on another worker.
 Interactive local/test runs may execute inline for a fast credential-free loop.
-Staging and production dispatch agent runs to `backend/scripts/agent_worker.py`
-so model latency does not occupy API worker capacity; the production worker
-connects with `GROUNDLOOM_WORKER_DATABASE_URL` as the dedicated
-`groundloom_worker` database role and records leases, attempts, actor context,
-and terminal/requeue state durably.
+Staging and production dispatch agent, ingestion, index, delegation, export, and
+retention runs to their durable worker entrypoints so model or parser latency
+does not occupy API capacity. Each production worker connects with
+`GROUNDLOOM_WORKER_DATABASE_URL` as the dedicated `groundloom_worker` database
+role and records leases, attempts, actor context, and terminal/requeue state
+durably. `GROUNDLOOM_MIGRATION_DATABASE_URL` is reserved for the migration
+process and is never used by an API or worker.

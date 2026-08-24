@@ -69,13 +69,27 @@ class PostgresCheckpointProvider:
                 "Install the pinned agent extra to use the Postgres checkpoint provider"
             ) from exc
         with PostgresSaver.from_conn_string(self.database_url) as saver:
-            saver.setup()
             yield saver
+
+
+def setup_postgres_checkpoint_schema(database_url: str) -> None:
+    """Create/update LangGraph checkpoint tables from the migrator process."""
+    try:
+        from langgraph.checkpoint.postgres import PostgresSaver
+    except ImportError as exc:
+        raise RuntimeError(
+            "Install the pinned agent extra to initialize the Postgres checkpoint schema"
+        ) from exc
+    normalized_url = database_url.replace("postgresql+psycopg://", "postgresql://", 1)
+    with PostgresSaver.from_conn_string(normalized_url) as saver:
+        saver.setup()
 
 
 def build_checkpoint_provider(settings: Settings) -> PostgresCheckpointProvider | None:
     if settings.checkpoint_backend == "local":
         return None
     if settings.checkpoint_backend == "postgres":
-        return PostgresCheckpointProvider(settings.database_url)
+        return PostgresCheckpointProvider(
+            settings.worker_database_url or settings.database_url
+        )
     raise RuntimeError(f"Unsupported checkpoint backend: {settings.checkpoint_backend}")

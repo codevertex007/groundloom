@@ -4,7 +4,7 @@ import pytest
 from app.agent_runtime import LocalDeterministicAgentRuntime, build_agent_runtime
 from app.checkpoints import load_checkpoint, save_checkpoint
 from app.config import Settings
-from app.db import build_session_factory, init_database
+from app.db import build_session_factory, init_database, prepare_worker_database
 from app.errors import GroundloomError
 from app.ids import new_id
 from app.main import create_app
@@ -31,6 +31,59 @@ def test_production_refuses_unsafe_defaults():
         assert "PostgreSQL" in str(exc)
     else:
         raise AssertionError("Production accepted an unsafe local configuration")
+
+
+def test_production_worker_helper_uses_worker_role_without_bootstrap(monkeypatch):
+    settings = Settings(
+        env="production",
+        database_url="postgresql+psycopg://groundloom_api:password@localhost/groundloom",
+        worker_database_url="postgresql+psycopg://groundloom_worker:password@localhost/groundloom",
+    )
+    observed = {}
+
+    class FakeEngine:
+        pass
+
+    engine = FakeEngine()
+
+    def fake_make_engine(url):
+        observed["url"] = url
+        return engine
+
+    monkeypatch.setattr("app.db.make_engine", fake_make_engine)
+    monkeypatch.setattr(
+        "app.db.build_session_factory",
+        lambda url, bound_engine: (url, bound_engine),
+    )
+    url, actual_engine, factory = prepare_worker_database(settings)
+    assert url == "postgresql+psycopg://groundloom_worker:password@localhost/groundloom"
+    assert observed["url"] == url
+    assert actual_engine is engine
+    assert factory == (url, engine)
+
+
+def test_non_sqlite_app_startup_does_not_apply_schema_bootstrap(monkeypatch):
+    settings = Settings(
+        env="staging",
+        database_url="postgresql+psycopg://groundloom_api:password@localhost/groundloom",
+        worker_database_url="postgresql+psycopg://groundloom_worker:password@localhost/groundloom",
+        migration_database_url="postgresql+psycopg://groundloom_migrator:password@localhost/groundloom",
+        auth_mode="hmac",
+        auth_secret="staging-test-secret-that-is-long-enough",
+    )
+    class FakeEngine:
+        pass
+
+    monkeypatch.setattr("app.main.make_engine", lambda _url: FakeEngine())
+    monkeypatch.setattr(
+        "app.main.apply_migrations",
+        lambda _url: pytest.fail("API startup must not apply migrations"),
+    )
+    monkeypatch.setattr(
+        "app.main.init_database",
+        lambda _url: pytest.fail("API startup must not initialize schema"),
+    )
+    create_app(settings)
 
 
 def test_openapi_contains_contract_boundary(tmp_path):

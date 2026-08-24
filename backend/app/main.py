@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from .auth import verify_context_token
 from .config import Settings, get_settings
 from .context import RuntimeContext, resolve_context
-from .db import build_session_factory, init_database
+from .db import build_session_factory, init_database, make_engine
 from .errors import GroundloomError
 from .migrations import apply_migrations
 from .models import (
@@ -106,11 +106,17 @@ from .telemetry import build_telemetry
 def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     settings.validate_runtime()
-    apply_migrations(settings.database_url)
-    db_engine = init_database(settings.database_url)
+    if settings.database_url.startswith("sqlite"):
+        apply_migrations(settings.database_url)
+        db_engine = init_database(settings.database_url)
+    else:
+        # PostgreSQL migrations and table ownership belong to the dedicated
+        # migration process, not the API role during application startup.
+        db_engine = make_engine(settings.database_url)
     session_factory = build_session_factory(settings.database_url, db_engine)
-    with session_factory() as db:
-        seed_local(db, settings)
+    if settings.database_url.startswith("sqlite"):
+        with session_factory() as db:
+            seed_local(db, settings)
     app = FastAPI(
         title="Groundloom API",
         version="0.1.0",

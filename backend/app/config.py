@@ -15,6 +15,7 @@ class Settings(BaseSettings):
     env: Literal["development", "test", "staging", "production"] = "development"
     database_url: str = "sqlite:///./backend/data/groundloom.db"
     worker_database_url: str | None = None
+    migration_database_url: str | None = None
     checkpoint_backend: str = "local"
     object_store_path: Path = Path("./backend/data/objects")
     object_store_backend: str = "local"
@@ -62,6 +63,8 @@ class Settings(BaseSettings):
         return value
 
     def validate_runtime(self) -> None:
+        if self.env in {"staging", "production"} and not self.database_url.startswith("sqlite"):
+            self._validate_runtime_database_roles()
         if self.env == "production":
             if self.database_url.startswith("sqlite"):
                 raise RuntimeError(
@@ -77,14 +80,6 @@ class Settings(BaseSettings):
                 raise RuntimeError("Production requires an object storage bucket")
             if self.checkpoint_backend != "postgres":
                 raise RuntimeError("Production requires the Postgres checkpoint backend")
-            if not self.worker_database_url:
-                raise RuntimeError("Production requires a separate worker database URL")
-            worker_user = urlparse(self.worker_database_url).username
-            api_user = urlparse(self.database_url).username
-            if worker_user != "groundloom_worker":
-                raise RuntimeError("The worker database URL must use the groundloom_worker role")
-            if api_user == "groundloom_worker":
-                raise RuntimeError("The API database URL cannot use the worker database role")
             if self.export_inline_local is True:
                 raise RuntimeError("Production requires exports to run through the durable worker")
             if self.agent_inline_local:
@@ -107,6 +102,25 @@ class Settings(BaseSettings):
             ):
                 raise RuntimeError("Production Langfuse telemetry requires keys and host")
 
+    def _validate_runtime_database_roles(self) -> None:
+        if not self.worker_database_url:
+            raise RuntimeError("Staging/production requires a separate worker database URL")
+        if not self.migration_database_url:
+            raise RuntimeError("Staging/production requires a separate migration database URL")
+        worker_user = urlparse(self.worker_database_url).username
+        migration_user = urlparse(self.migration_database_url).username
+        api_user = urlparse(self.database_url).username
+        if worker_user != "groundloom_worker":
+            raise RuntimeError("The worker database URL must use the groundloom_worker role")
+        if migration_user != "groundloom_migrator":
+            raise RuntimeError(
+                "The migration database URL must use the groundloom_migrator role"
+            )
+        if api_user == "groundloom_worker":
+            raise RuntimeError("The API database URL cannot use the worker database role")
+        if api_user == "groundloom_migrator":
+            raise RuntimeError("The API database URL cannot use the migration database role")
+
     def effective_config_fingerprint(self) -> str:
         """Return a stable fingerprint over non-secret effective settings."""
         safe = {
@@ -115,6 +129,11 @@ class Settings(BaseSettings):
             "worker_database_backend": (
                 self.worker_database_url.split(":", 1)[0]
                 if self.worker_database_url
+                else None
+            ),
+            "migration_database_backend": (
+                self.migration_database_url.split(":", 1)[0]
+                if self.migration_database_url
                 else None
             ),
             "checkpoint_backend": self.checkpoint_backend,

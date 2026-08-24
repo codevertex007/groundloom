@@ -3,7 +3,7 @@
 | State | Authority | Examples |
 |---|---|---|
 | Product/domain | Postgres | projects, versions, blocks, citations, proposals, approvals, jobs |
-| Agent execution | Postgres checkpointer | messages, tool bookkeeping, todos, summaries, interrupts |
+| Agent execution | Postgres checkpointer through the worker database connection | messages, tool bookkeeping, todos, summaries, interrupts |
 | Binary/artifact | Object storage | uploads, normalized documents, previews, exports |
 | Scratch | Deep Agents backends | notes, offloaded tool results, temporary drafts |
 | Derived | pgvector/search/cache | chunks, embeddings, rankings, projections |
