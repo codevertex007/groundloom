@@ -1,10 +1,9 @@
 import json
 from collections.abc import Generator
-from pathlib import Path
 
 from fastapi import Depends, FastAPI, File, Header, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, JSONResponse, StreamingResponse
+from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 
 from .config import Settings, get_settings
@@ -22,6 +21,7 @@ from .models import (
     PublicEvent,
     Skill,
 )
+from .object_store import build_object_store
 from .schemas import (
     DecisionIn,
     ErrorBody,
@@ -94,6 +94,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         settings.langfuse_secret_key,
         settings.langfuse_host,
     )
+    app.state.object_store = build_object_store(settings)
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
@@ -168,7 +169,7 @@ def register_routes(app: FastAPI) -> FastAPI:
             database = "ok"
         except Exception:
             database = "degraded"
-        object_store = "ok" if settings.object_store_path.exists() else "degraded"
+        object_store = "ok" if request.app.state.object_store.health() else "degraded"
         return {
             "status": "ok" if database == object_store == "ok" else "degraded",
             "database": database,
@@ -209,7 +210,7 @@ def register_routes(app: FastAPI) -> FastAPI:
                         409,
                     )
                 return existing.response_json
-        project = create_project(db, ctx, body)
+        project = create_project(db, ctx, body, request.app.state.settings)
         response = project_dto(db, project)
         response = remember_idempotency(db, ctx, idempotency_key, "project.create", response)
         db.commit()
@@ -225,6 +226,7 @@ def register_routes(app: FastAPI) -> FastAPI:
     def message_send(
         project_id: str,
         body: MessageCreate,
+        request: Request,
         db: Session = Depends(get_db),
         ctx: RuntimeContext = Depends(get_ctx),
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
@@ -252,6 +254,7 @@ def register_routes(app: FastAPI) -> FastAPI:
             thread,
             body.text,
             idempotency_key or f"message:{project.id}:{body.text}",
+            request.app.state.settings,
         )
         return run
 
@@ -350,7 +353,10 @@ def register_routes(app: FastAPI) -> FastAPI:
 
     @app.post("/v1/runs/{run_id}/resume", response_model=RunOut, status_code=202)
     def run_resume(
-        run_id: str, db: Session = Depends(get_db), ctx: RuntimeContext = Depends(get_ctx)
+        run_id: str,
+        request: Request,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
     ):
         run = db.query(AgentRun).filter_by(id=run_id, workspace_id=ctx.workspace_id).first()
         if not run:
@@ -360,7 +366,7 @@ def register_routes(app: FastAPI) -> FastAPI:
         run.status = "running"
         run.cancel_requested = False
         db.commit()
-        execute_agent_turn(db, ctx, run)
+        execute_agent_turn(db, ctx, run, request.app.state.settings)
         return run
 
     @app.get("/v1/sources", response_model=list[SourceOut])
@@ -651,15 +657,35 @@ def register_routes(app: FastAPI) -> FastAPI:
         job = db.query(ExportJob).filter_by(id=export_id, workspace_id=ctx.workspace_id).first()
         if not job or job.status != "completed" or not job.object_key:
             raise GroundloomError("RESOURCE_NOT_FOUND", "The artifact was not found.", 404)
-        path = request.app.state.settings.object_store_path.joinpath(job.object_key)
-        if not path.exists():
+        try:
+            data = request.app.state.object_store.get_bytes(job.object_key)
+        except GroundloomError as exc:
+            if exc.status_code == 404:
+                raise GroundloomError(
+                    "DEPENDENCY_UNAVAILABLE",
+                    "The artifact is temporarily unavailable.",
+                    503,
+                    retryable=True,
+                ) from exc
+            raise
+        if not data:
             raise GroundloomError(
                 "DEPENDENCY_UNAVAILABLE",
                 "The artifact is temporarily unavailable.",
                 503,
                 retryable=True,
             )
-        return FileResponse(path, filename=Path(path).name)
+        media_type = {
+            "pdf": "application/pdf",
+            "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            "html": "text/html",
+            "md": "text/markdown",
+        }.get(job.format, "application/octet-stream")
+        return Response(
+            content=data,
+            media_type=media_type,
+            headers={"Content-Disposition": f'attachment; filename="{job.id}.{job.format}"'},
+        )
 
     return app
 

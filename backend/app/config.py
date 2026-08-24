@@ -11,7 +11,14 @@ class Settings(BaseSettings):
 
     env: Literal["development", "test", "staging", "production"] = "development"
     database_url: str = "sqlite:///./backend/data/groundloom.db"
+    checkpoint_backend: str = "local"
     object_store_path: Path = Path("./backend/data/objects")
+    object_store_backend: str = "local"
+    object_store_bucket: str | None = None
+    object_store_endpoint: str | None = None
+    object_store_region: str = "us-east-1"
+    object_store_access_key: str | None = None
+    object_store_secret_key: str | None = None
     public_base_url: str = "http://localhost:8000"
     cors_origins: list[str] | str = Field(
         default_factory=lambda: [
@@ -31,6 +38,8 @@ class Settings(BaseSettings):
     langfuse_secret_key: str | None = None
     langfuse_host: str | None = None
     max_upload_bytes: int = 25_000_000
+    agent_max_attempts: int = 3
+    agent_retry_backoff_seconds: float = 0.25
     event_retention_days: int = 90
     auth_secret: str | None = None
 
@@ -51,6 +60,12 @@ class Settings(BaseSettings):
                 raise RuntimeError("Production requires an explicitly configured model provider")
             if self.telemetry_provider == "local":
                 raise RuntimeError("Production requires an explicitly configured telemetry provider")
+            if self.object_store_backend != "s3":
+                raise RuntimeError("Production requires S3-compatible object storage")
+            if not self.object_store_bucket:
+                raise RuntimeError("Production requires an object storage bucket")
+            if self.checkpoint_backend != "postgres":
+                raise RuntimeError("Production requires the Postgres checkpoint backend")
             if not self.auth_secret:
                 raise RuntimeError("Production requires auth encryption configuration")
             if "*" in self.cors_origins:
@@ -61,5 +76,6 @@ class Settings(BaseSettings):
 def get_settings() -> Settings:
     settings = Settings()
     settings.validate_runtime()
-    settings.object_store_path.mkdir(parents=True, exist_ok=True)
+    if settings.object_store_backend == "local":
+        settings.object_store_path.mkdir(parents=True, exist_ok=True)
     return settings

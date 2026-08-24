@@ -1,6 +1,7 @@
 import base64
 import hashlib
 import re
+import time
 import zipfile
 from datetime import timedelta
 from html import unescape
@@ -24,6 +25,7 @@ from .models import (
     DelegatedTask,
     ExportJob,
     IdempotencyRecord,
+    IngestionJob,
     Membership,
     MemoryItem,
     OutboxMessage,
@@ -45,6 +47,7 @@ from .models import (
     Workspace,
     utcnow,
 )
+from .object_store import build_object_store
 from .schemas import (
     DecisionIn,
     EvidenceBundle,
@@ -216,7 +219,9 @@ def _project(db: Session, ctx: RuntimeContext, project_id: str) -> Project:
     return project
 
 
-def create_project(db: Session, ctx: RuntimeContext, body: ProjectCreate) -> Project:
+def create_project(
+    db: Session, ctx: RuntimeContext, body: ProjectCreate, settings: Settings | None = None
+) -> Project:
     ctx.require("create projects", {"author", "reviewer", "workspace_admin", "organization_admin"})
     for version_id in body.source_version_ids:
         version = (
@@ -298,6 +303,7 @@ def create_project(db: Session, ctx: RuntimeContext, body: ProjectCreate) -> Pro
         thread,
         "Project initialized; inspect the brief and selected evidence when ready.",
         "project-initialize",
+        settings,
     )
     return project
 
@@ -399,6 +405,7 @@ def start_run(
     thread: AgentThread,
     request_text: str,
     idempotency_key: str,
+    settings: Settings | None = None,
 ) -> AgentRun:
     existing = (
         db.query(AgentRun)
@@ -428,7 +435,11 @@ def start_run(
             "skill_version_ids": config.skill_version_ids if config else [],
             "prompt_version": "groundloom.prompt.v1",
             "tool_contract_version": "groundloom.tools.v1",
-            "model_profile": "local.deterministic.v1",
+            "model_profile": (
+                f"{settings.model_provider}:{settings.model_name}"
+                if settings
+                else "local.deterministic.v1"
+            ),
             "retrieval_version": "lexical.v1",
             "evaluator_version": "deterministic.v1",
         },
@@ -438,7 +449,7 @@ def start_run(
     db.flush()
     append_event(db, ctx, run, "run.started", {"status": "running", "request": request_text[:500]})
     db.commit()
-    execute_agent_turn(db, ctx, run)
+    execute_agent_turn(db, ctx, run, settings)
     completed = db.get(AgentRun, run.id)
     if completed is None:
         raise GroundloomError("INTERNAL_ERROR", "The run disappeared before completion.", 500)
@@ -503,7 +514,81 @@ def search_evidence(
     )
 
 
-def execute_agent_turn(db: Session, ctx: RuntimeContext, run: AgentRun) -> None:
+def execute_deep_agent_turn(
+    db: Session, ctx: RuntimeContext, run: AgentRun, settings: Settings
+) -> None:
+    from .agent_runtime import build_agent_runtime
+
+    thread = db.query(AgentThread).filter_by(id=run.thread_id, workspace_id=ctx.workspace_id).first()
+    if not thread:
+        raise GroundloomError("DEPENDENCY_UNAVAILABLE", "The project thread is unavailable.", 503)
+    result: dict[str, Any] | None = None
+    provider_error: Exception | None = None
+    attempts = max(1, min(settings.agent_max_attempts, 5))
+    for attempt in range(attempts):
+        if run.cancel_requested:
+            run.status = "cancelled"
+            append_event(db, ctx, run, "run.cancelled", {"status": "cancelled"})
+            db.commit()
+            return
+        try:
+            runtime = build_agent_runtime(settings.model_provider, settings)
+            result = runtime.invoke(db, ctx, run.project_id, thread.thread_key, run.request_text)
+            provider_error = None
+            break
+        except Exception as exc:
+            provider_error = exc
+            if attempt + 1 < attempts:
+                time.sleep(min(settings.agent_retry_backoff_seconds * (2**attempt), 2.0))
+    if provider_error is not None or result is None:
+        failure = provider_error or RuntimeError("agent provider returned no result")
+        run.status = "failed"
+        run.error_code = "AGENT_PROVIDER_ERROR"
+        append_event(
+            db,
+            ctx,
+            run,
+            "run.failed",
+            {"status": "failed", "error_code": run.error_code, "retryable": True},
+        )
+        audit(db, ctx, "run.failed", "agent_run", run.id, "Deep Agents provider execution failed", "failure")
+        db.commit()
+        raise GroundloomError(
+            "DEPENDENCY_UNAVAILABLE",
+            "The configured agent provider could not complete the run.",
+            503,
+            retryable=True,
+        ) from failure
+    messages = result.get("messages", []) if isinstance(result, dict) else []
+    last = messages[-1] if messages else {}
+    content = last.get("content", "") if isinstance(last, dict) else getattr(last, "content", "")
+    if isinstance(content, list):
+        content = " ".join(str(item.get("text", item)) if isinstance(item, dict) else str(item) for item in content)
+    append_event(
+        db,
+        ctx,
+        run,
+        "assistant.message",
+        {"text": str(content)[:4000], "provider": settings.model_provider},
+    )
+    run.status = "completed"
+    append_event(
+        db,
+        ctx,
+        run,
+        "run.completed",
+        {"status": "completed", "summary": "Deep Agents collaborator completed the turn."},
+    )
+    audit(db, ctx, "run.completed", "agent_run", run.id, "Completed Deep Agents project turn")
+    db.commit()
+
+
+def execute_agent_turn(
+    db: Session, ctx: RuntimeContext, run: AgentRun, settings: Settings | None = None
+) -> None:
+    if settings and settings.model_provider != "local":
+        execute_deep_agent_turn(db, ctx, run, settings)
+        return
     project = _project(db, ctx, run.project_id)
     text = run.request_text.lower()
     if run.cancel_requested:
@@ -789,8 +874,7 @@ def upload_source(
         db.query(func.max(SourceVersion.version_no)).filter_by(source_id=source.id).scalar() or 0
     ) + 1
     object_key = f"workspaces/{ctx.workspace_id}/sources/{source.id}/versions/{version_no}/original{Path(body.filename).suffix.lower()}"
-    settings.object_store_path.joinpath(object_key).parent.mkdir(parents=True, exist_ok=True)
-    settings.object_store_path.joinpath(object_key).write_bytes(raw)
+    build_object_store(settings).put_bytes(object_key, raw)
     version = SourceVersion(
         id=new_id("sv"),
         workspace_id=ctx.workspace_id,
@@ -804,53 +888,15 @@ def upload_source(
     )
     db.add(version)
     db.flush()
-    append_source_stage(db, ctx, version, "scanning")
-    text = parse_source(raw, extension)
-    if not text.strip():
-        version.status = "failed"
-        version.failure_code = "EMPTY_DOCUMENT"
-        append_source_stage(db, ctx, version, "failed")
-        db.commit()
-        raise GroundloomError("JOB_FAILED", "The source could not produce readable text.", 422)
-    version.status = "normalizing"
-    append_source_stage(db, ctx, version, "normalizing")
-    for index, paragraph in enumerate(
-        [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()] or [text.strip()]
-    ):
-        signals = (
-            ["possible_instruction_text"]
-            if re.search(r"ignore (previous|all) instructions|system prompt", paragraph, re.I)
-            else []
-        )
-        block = SourceBlock(
-            id=new_id("blk"),
-            workspace_id=ctx.workspace_id,
-            source_version_id=version.id,
-            page_no=index + 1 if extension == "pdf" else None,
-            section_path="",
-            block_no=index,
-            text=paragraph[:20_000],
-            security_signals=signals,
-        )
-        db.add(block)
-        db.flush()
-        terms = sorted(set(re.findall(r"[a-z0-9]{3,}", paragraph.lower())))
-        db.add(
-            SourceChunk(
-                id=new_id("chk"),
-                workspace_id=ctx.workspace_id,
-                source_version_id=version.id,
-                source_block_id=block.id,
-                chunk_no=0,
-                text=paragraph[:5000],
-                token_terms=terms,
-            )
-        )
-    version.status = "indexing"
-    append_source_stage(db, ctx, version, "indexing")
-    version.status = "ready"
-    source.current_version_id = version.id
-    append_source_stage(db, ctx, version, "ready")
+    ingestion_job = IngestionJob(
+        id=new_id("ing"),
+        workspace_id=ctx.workspace_id,
+        source_version_id=version.id,
+        status="queued",
+        stage="queued",
+    )
+    db.add(ingestion_job)
+    process_ingestion_job(db, ctx, settings, ingestion_job, raw=raw)
     audit(
         db,
         ctx,
@@ -861,6 +907,161 @@ def upload_source(
     )
     db.commit()
     return source
+
+
+def process_ingestion_job(
+    db: Session,
+    ctx: RuntimeContext,
+    settings: Settings,
+    job: IngestionJob,
+    *,
+    raw: bytes | None = None,
+) -> SourceVersion:
+    """Run the idempotent source state machine for one leased job.
+
+    The API uses this synchronously for the local adapter. The worker entrypoint
+    uses the same function after claiming a queued/expired job, so parsing and
+    indexing cannot drift between local and deployment execution.
+    """
+    if job.workspace_id != ctx.workspace_id:
+        raise GroundloomError("FORBIDDEN", "The ingestion job is outside the workspace scope.", 403)
+    version = (
+        db.query(SourceVersion)
+        .filter_by(id=job.source_version_id, workspace_id=ctx.workspace_id)
+        .first()
+    )
+    if not version:
+        raise GroundloomError("RESOURCE_NOT_FOUND", "The source version was not found.", 404)
+    if version.status == "ready" and job.status == "completed":
+        return version
+    if raw is None:
+        raw = build_object_store(settings).get_bytes(version.object_key)
+    extension = Path(version.object_key).suffix.lower().removeprefix(".")
+    job.status = "running"
+    job.stage = "scanning"
+    version.status = "scanning"
+    append_source_stage(db, ctx, version, "scanning")
+    text = parse_source(raw, extension)
+    if not text.strip():
+        version.status = "failed"
+        version.failure_code = "EMPTY_DOCUMENT"
+        job.status = "failed"
+        job.stage = "failed"
+        job.error_code = version.failure_code
+        job.lease_owner = None
+        job.lease_until = None
+        append_source_stage(db, ctx, version, "failed")
+        raise GroundloomError("JOB_FAILED", "The source could not produce readable text.", 422)
+    version.status = "normalizing"
+    job.stage = "normalizing"
+    append_source_stage(db, ctx, version, "normalizing")
+    existing = db.query(SourceBlock).filter_by(source_version_id=version.id).count()
+    if not existing:
+        for index, paragraph in enumerate(
+            [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()] or [text.strip()]
+        ):
+            signals = (
+                ["possible_instruction_text"]
+                if re.search(r"ignore (previous|all) instructions|system prompt", paragraph, re.I)
+                else []
+            )
+            block = SourceBlock(
+                id=new_id("blk"),
+                workspace_id=ctx.workspace_id,
+                source_version_id=version.id,
+                page_no=index + 1 if extension == "pdf" else None,
+                section_path="",
+                block_no=index,
+                text=paragraph[:20_000],
+                security_signals=signals,
+            )
+            db.add(block)
+            db.flush()
+            terms = sorted(set(re.findall(r"[a-z0-9]{3,}", paragraph.lower())))
+            db.add(
+                SourceChunk(
+                    id=new_id("chk"),
+                    workspace_id=ctx.workspace_id,
+                    source_version_id=version.id,
+                    source_block_id=block.id,
+                    chunk_no=0,
+                    text=paragraph[:5000],
+                    token_terms=terms,
+                )
+            )
+    version.status = "indexing"
+    job.stage = "indexing"
+    append_source_stage(db, ctx, version, "indexing")
+    version.status = "ready"
+    job.status = "completed"
+    job.stage = "ready"
+    job.lease_owner = None
+    job.lease_until = None
+    source = db.query(Source).filter_by(id=version.source_id, workspace_id=ctx.workspace_id).first()
+    if source:
+        source.current_version_id = version.id
+    append_source_stage(db, ctx, version, "ready")
+    return version
+
+
+def claim_ingestion_jobs(
+    db: Session, workspace_id: str, worker_id: str, *, limit: int = 10, lease_seconds: int = 300
+) -> list[IngestionJob]:
+    """Claim queued or expired jobs with a bounded durable lease."""
+    now = utcnow()
+    rows = (
+        db.query(IngestionJob)
+        .filter(IngestionJob.workspace_id == workspace_id)
+        .filter(
+            (IngestionJob.status == "queued")
+            | ((IngestionJob.status == "running") & (IngestionJob.lease_until < now))
+        )
+        .order_by(IngestionJob.created_at)
+        .limit(max(1, min(limit, 100)))
+        .all()
+    )
+    for row in rows:
+        row.status = "running"
+        row.lease_owner = worker_id
+        row.lease_until = now + timedelta(seconds=lease_seconds)
+        row.attempts += 1
+    db.commit()
+    return rows
+
+
+def run_ingestion_worker_once(
+    db: Session,
+    ctx: RuntimeContext,
+    settings: Settings,
+    worker_id: str,
+    *,
+    limit: int = 10,
+) -> dict[str, int]:
+    claimed = claim_ingestion_jobs(db, ctx.workspace_id, worker_id, limit=limit)
+    completed = 0
+    failed = 0
+    for job in claimed:
+        try:
+            process_ingestion_job(db, ctx, settings, job)
+            audit(db, ctx, "ingestion.job.completed", "ingestion_job", job.id, "Ingestion completed")
+            db.commit()
+            completed += 1
+        except GroundloomError as exc:
+            db.rollback()
+            failed_job = (
+                db.query(IngestionJob)
+                .filter_by(id=job.id, workspace_id=ctx.workspace_id)
+                .first()
+            )
+            if failed_job:
+                failed_job.status = "failed"
+                failed_job.stage = "failed"
+                failed_job.error_code = exc.code
+                failed_job.lease_owner = None
+                failed_job.lease_until = None
+                db.commit()
+            failed += 1
+    return {"claimed": len(claimed), "completed": completed, "failed": failed}
 
 
 def append_source_stage(
@@ -1598,14 +1799,10 @@ def export_content(
     )
     db.add(job)
     db.flush()
-    settings.object_store_path.joinpath("workspaces", ctx.workspace_id, "exports").mkdir(
-        parents=True, exist_ok=True
-    )
     rendered = render_content(project.name, blocks, body.format)
     suffix = {"md": "md", "html": "html", "pdf": "pdf", "docx": "docx"}[body.format]
     object_key = f"workspaces/{ctx.workspace_id}/exports/{job.id}.{suffix}"
-    settings.object_store_path.joinpath(object_key).parent.mkdir(parents=True, exist_ok=True)
-    settings.object_store_path.joinpath(object_key).write_bytes(rendered)
+    build_object_store(settings).put_bytes(object_key, rendered)
     job.object_key = object_key
     job.status = "completed"
     audit(db, ctx, "export.completed", "export_job", job.id, "Rendered immutable content version")

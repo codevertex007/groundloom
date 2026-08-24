@@ -7,6 +7,8 @@ can replace this seam with the pinned LangGraph Postgres checkpointer.
 
 import json
 import re
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 from typing import Any
 
@@ -50,3 +52,30 @@ def load_checkpoint(
     if not target.exists():
         return None
     return json.loads(target.read_text(encoding="utf-8"))
+
+
+class PostgresCheckpointProvider:
+    """Verified LangGraph PostgresSaver boundary for production agents."""
+
+    def __init__(self, database_url: str):
+        self.database_url = database_url.replace("postgresql+psycopg://", "postgresql://", 1)
+
+    @contextmanager
+    def open(self) -> Iterator[Any]:
+        try:
+            from langgraph.checkpoint.postgres import PostgresSaver
+        except ImportError as exc:
+            raise RuntimeError(
+                "Install the pinned agent extra to use the Postgres checkpoint provider"
+            ) from exc
+        with PostgresSaver.from_conn_string(self.database_url) as saver:
+            saver.setup()
+            yield saver
+
+
+def build_checkpoint_provider(settings: Settings) -> PostgresCheckpointProvider | None:
+    if settings.checkpoint_backend == "local":
+        return None
+    if settings.checkpoint_backend == "postgres":
+        return PostgresCheckpointProvider(settings.database_url)
+    raise RuntimeError(f"Unsupported checkpoint backend: {settings.checkpoint_backend}")

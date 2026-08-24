@@ -16,11 +16,12 @@ This is the initial planned matrix. Codex must replace planned identifiers with 
 | `UI-RUN-001..002` | Browser smoke durable activity panel; `/v1/threads/{id}/events` replay DTO and `/events/stream` SSE smoke |
 | `UI-PATCH-001..002` | Browser smoke proposal review; `test_patch_reject_and_accept_exactly_once` |
 | `UI-CITE-001`, `UI-A11Y-001` | Canvas citation panel and keyboard `Ctrl/Cmd+K`, `Ctrl/Cmd+Enter`; browser DOM/screenshot evidence |
-| `NFR-REL-001..004` | durability, replay, failure injection, backup/restore |
+| `NFR-REL-001..004` | `backend/tests/test_adapters_and_jobs.py::test_ingestion_worker_reclaims_and_replays_a_queued_job`; `backend/tests/test_api_vertical_slice.py` replay/idempotency tests; backup/restore and live failure injection remain release evidence |
 | `NFR-PERF-001..004` | API/retrieval/agent-activity load scenarios |
-| `SEC-AUTH-001..006` | route/service/repository/tool cross-tenant matrix |
+| `SEC-AUTH-001..006` | `backend/tests/test_api_vertical_slice.py::test_cross_workspace_is_denied`; `backend/tests/test_adapters_and_jobs.py::test_local_object_store_rejects_escape_and_round_trips`; scoped tool/memory tests |
 | `ARCH-STATE-001..004` | architecture/static tests plus recovery/proposal tests |
 | `TOOL-*` | per-tool schema/auth/replay/bounds/trace tests |
 | `API-*`, `EVT-*` | OpenAPI/SSE schema, compatibility, replay tests, and `test_project_source_grounded_run_and_replay` stream assertion |
+| `EVAL-*` | `backend/tests/test_evaluation.py::test_deterministic_rubric_requires_terms_and_citations`; `backend/scripts/run_evals.py` JSON baseline |
 
 Release blocks on any active requirement without proof or explicitly approved manual verification.

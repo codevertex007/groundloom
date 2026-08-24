@@ -47,7 +47,23 @@ class LangfuseTelemetry:
     def __init__(self, public_key: str | None, secret_key: str | None, host: str | None):
         if not public_key or not secret_key or not host:
             raise RuntimeError("Langfuse telemetry requires public key, secret key, and host")
-        raise RuntimeError("Langfuse integration requires a verified deployment adapter")
+        try:
+            from langfuse import Langfuse
+        except ImportError as exc:
+            raise RuntimeError("Install the pinned observability extra for Langfuse") from exc
+        self.client = Langfuse(
+            public_key=public_key,
+            secret_key=secret_key,
+            base_url=host,
+            tracing_enabled=True,
+        )
+
+    def emit(self, event: str, attributes: dict[str, Any]) -> None:
+        safe = redact(attributes)
+        self.client.create_event(name=event, metadata=safe)
+
+    def flush(self) -> None:
+        self.client.flush()
 
 
 def build_telemetry(provider: str, public_key: str | None = None, secret_key: str | None = None, host: str | None = None):

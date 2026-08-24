@@ -3,7 +3,7 @@
 ## Checklist
 
 - [x] `IMPL-07-001` Extract screen/route/component inventory from attached UI and map to contracts.
-- [ ] `IMPL-07-002` Generated/typed API client and auth/workspace shell.
+- [x] `IMPL-07-002` Shared JSDoc-typed API client and explicit local auth/workspace headers; production identity integration remains deployment work.
 - [x] `IMPL-07-003` Projects/New Project/Sources/Skills screens and core states.
 - [x] `IMPL-07-004` Canvas outline/content/source explorer with block selection and citations.
 - [x] `IMPL-07-005` Primary-agent panel with replay-safe events, todos, subagents, approvals, cancel/resume controls.

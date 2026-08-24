@@ -6,16 +6,8 @@ import {
   Library, LoaderCircle, Menu, MoreHorizontal, PanelLeft, Plus, RefreshCw, Search,
   Send, Settings, ShieldCheck, Sparkles, Upload, X, Zap,
 } from "lucide-react";
+import { api } from "./api";
 import "./styles.css";
-
-const API = import.meta.env.VITE_API_URL || "http://127.0.0.1:8000";
-const headers = () => ({ "Content-Type": "application/json", "X-User-ID": "local-user", "X-Workspace-ID": "local-workspace", "X-Correlation-ID": crypto.randomUUID() });
-async function api(path, options = {}) {
-  const response = await fetch(`${API}${path}`, { ...options, headers: { ...headers(), ...(options.headers || {}) } });
-  const data = await response.json().catch(() => ({}));
-  if (!response.ok) throw new Error(data.message || "The request could not be completed.");
-  return data;
-}
 
 const fmt = (date) => date ? new Date(date).toLocaleDateString(undefined, { month: "short", day: "numeric" }) : "—";
 const iconFor = (type) => type === "pdf" ? "PDF" : type === "docx" ? "DOC" : "TXT";

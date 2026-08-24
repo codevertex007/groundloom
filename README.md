@@ -2,7 +2,10 @@
 
 Groundloom is a source-grounded knowledge production studio. It uses one persistent primary Deep Agent per project to investigate sources, load skills, plan work, delegate bounded tasks, draft structured content, validate results, repair failures, and collaborate with the user from project setup through export.
 
-This repository pack is an implementation specification for Codex. It intentionally contains documentation and references before application code.
+This repository contains the implemented local vertical system plus the
+deployment adapters and release documentation. The local adapter runs without
+production credentials; production-shaped provider gates require the optional
+agent, storage, observability, and Postgres dependencies plus real services.
 
 ## Start here
 
@@ -18,7 +21,11 @@ A persistent central Deep Agent owns the adaptive semantic loop; typed tools, sc
 
 ## Repository state
 
-This package is specification-first. Empty application directories should not be created merely to resemble the target layout. Codex should introduce code only when a phase document calls for it, together with its required tests, migration, telemetry, and documentation updates.
+The backend, frontend, migrations, worker seams, agent harness, retrieval,
+review, validation, export, and local operational scripts are implemented.
+Remaining unchecked release gates are called out explicitly in
+[`docs/validation/release-gates.md`](docs/validation/release-gates.md) and
+require external infrastructure or release-owner evidence.
 
 ## Working name
 
@@ -34,6 +41,13 @@ Copy-Item .env.example .env
 $env:PYTHONPATH = "backend"
 python backend/scripts/migrate.py
 python -m uvicorn app.main:app --reload --port 8000
+```
+
+For deployment-shaped adapters install the pinned optional groups and configure
+their environment variables from `.env.example`:
+
+```powershell
+python -m pip install -e ".[dev,documents,postgres,agent,storage,observability]"
 ```
 
 In a second terminal:
@@ -54,6 +68,11 @@ python -m ruff check backend/app backend/tests
 python -m mypy backend/app --ignore-missing-imports
 python backend/scripts/validate_docs.py
 cd frontend; npm run build
+cd ..
+python backend/scripts/run_evals.py
+
+# Optional bounded worker pass
+python backend/scripts/ingestion_worker.py --once
 
 # Optional disposable local recovery exercise
 cd ..

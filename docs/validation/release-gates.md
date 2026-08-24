@@ -16,6 +16,6 @@ Release owner verifies:
 
 ## Local release evidence
 
-The local adapter gate is the evidence boundary for development: 13 backend tests, Ruff, mypy, documentation validation, and the frontend production build pass; the browser smoke covers project creation, source-grounded drafting, proposal review, and acceptance. The unchecked production gates above remain intentionally open because this environment has no verified Deep Agents provider, Postgres/pgvector instance, external object storage, identity provider, Langfuse deployment, or release-owner approval.
+The local adapter gate is the evidence boundary for development: 18 backend tests, Ruff, mypy, documentation validation, deterministic evaluation, and the frontend production build pass; the browser smoke covers project creation, source-grounded drafting, proposal review, and acceptance. The unchecked production gates above remain intentionally open because this environment has no live Deep Agents provider, Postgres/pgvector instance, external object storage, identity provider, Langfuse deployment, backup/restore rehearsal, load report, or release-owner approval.
 
 A waiver names the exact gate, evidence, risk owner, expiry, compensating controls, and approval. Tenant isolation, unauthorized canonical mutation, and data-loss risks are not waivable for launch.

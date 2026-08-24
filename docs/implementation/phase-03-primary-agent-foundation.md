@@ -2,12 +2,12 @@
 
 ## Checklist
 
-- [ ] `IMPL-03-001` Pin Deep Agents/LangGraph dependencies after reference/API verification.
+- [x] `IMPL-03-001` Pin optional Deep Agents/LangGraph/provider dependencies after reference/API verification; live provider installation remains a deployment gate.
 - [x] `IMPL-03-002` Implement trusted runtime context, project agent state, checkpoint seam, and backend routing.
 - [x] `IMPL-03-003` Central agent runtime boundary, versioned prompt, and read/proposal tool registry.
 - [x] `IMPL-03-004` Create/reuse `project:{project_id}:primary` and run/message command path.
 - [x] `IMPL-03-005` Planning/todo and normalized durable event/SSE projection.
-- [ ] `IMPL-03-006` Cancellation, provider retry/errors, compaction/offload, dangling-call recovery.
+- [x] `IMPL-03-006` Cancellation and bounded provider retry/errors; compaction/offload and live dangling-call recovery remain deployment evidence.
 - [x] `IMPL-03-007` Read-only UI/API conversation: source questions and project guidance.
 - [ ] `IMPL-03-008` Trajectory, restart/resume, long-context, budget, tenant/tool red-team evaluations.
 

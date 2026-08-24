@@ -22,6 +22,15 @@ dependencies = [
 documents = ["pypdf>=5,<6", "python-docx>=1.1,<2"]
 postgres = ["psycopg[binary]>=3.2,<4"]
 dev = ["pytest>=8,<9", "pytest-asyncio>=0.24,<1", "ruff>=0.8,<1", "mypy>=1.13,<2"]
+agent = [
+  "deepagents==0.7.8",
+  "langgraph-checkpoint-postgres==3.1.2",
+  "langchain-openai==1.6.0",
+  "langchain-anthropic==1.6.1",
+  "langchain-google-genai==4.3.5",
+]
+observability = ["langfuse==4.14.5"]
+storage = ["boto3>=1.35,<2"]
 
 [tool.setuptools.packages.find]
 where = ["backend"]

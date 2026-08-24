@@ -105,6 +105,22 @@ class SourceVersion(TimeStamped, Base):
     failure_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
 
 
+class IngestionJob(TimeStamped, Base):
+    __tablename__ = "ingestion_jobs"
+    __table_args__ = (UniqueConstraint("workspace_id", "source_version_id", name="uq_ingestion_version"),)
+    id: Mapped[str] = mapped_column(String(80), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
+    source_version_id: Mapped[str] = mapped_column(
+        ForeignKey("source_versions.id"), nullable=False, index=True
+    )
+    status: Mapped[str] = mapped_column(String(30), nullable=False, default="queued", index=True)
+    stage: Mapped[str] = mapped_column(String(30), nullable=False, default="queued")
+    attempts: Mapped[int] = mapped_column(Integer, default=0, nullable=False)
+    lease_owner: Mapped[str | None] = mapped_column(String(120), nullable=True)
+    lease_until: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    error_code: Mapped[str | None] = mapped_column(String(80), nullable=True)
+
+
 class SourceBlock(TimeStamped, Base):
     __tablename__ = "source_blocks"
     id: Mapped[str] = mapped_column(String(80), primary_key=True)

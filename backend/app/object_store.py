@@ -1,0 +1,108 @@
+"""Scoped binary storage adapters.
+
+The local adapter is used by development and tests. The S3-compatible adapter
+is the production boundary; application code only receives validated keys and
+never receives credentials or a general-purpose object-store client.
+"""
+
+from pathlib import Path
+from typing import Protocol
+
+from .config import Settings
+from .errors import GroundloomError
+
+
+class ObjectStore(Protocol):
+    def put_bytes(self, key: str, data: bytes) -> None: ...
+
+    def get_bytes(self, key: str) -> bytes: ...
+
+    def exists(self, key: str) -> bool: ...
+
+    def health(self) -> bool: ...
+
+
+def _validate_key(key: str) -> str:
+    path = Path(key)
+    if not key or path.is_absolute() or ".." in path.parts or "\\" in key:
+        raise GroundloomError("INVALID_INPUT", "Invalid object key.", 422)
+    return key
+
+
+class LocalObjectStore:
+    def __init__(self, root: Path):
+        self.root = root.resolve()
+        self.root.mkdir(parents=True, exist_ok=True)
+
+    def _path(self, key: str) -> Path:
+        target = (self.root / _validate_key(key)).resolve()
+        if self.root not in target.parents:
+            raise GroundloomError("INVALID_INPUT", "Object key escaped the storage root.", 422)
+        return target
+
+    def put_bytes(self, key: str, data: bytes) -> None:
+        target = self._path(key)
+        target.parent.mkdir(parents=True, exist_ok=True)
+        target.write_bytes(data)
+
+    def get_bytes(self, key: str) -> bytes:
+        target = self._path(key)
+        if not target.exists():
+            raise GroundloomError("RESOURCE_NOT_FOUND", "The artifact was not found.", 404)
+        return target.read_bytes()
+
+    def exists(self, key: str) -> bool:
+        return self._path(key).exists()
+
+    def health(self) -> bool:
+        return self.root.exists()
+
+
+class S3ObjectStore:
+    def __init__(self, settings: Settings):
+        if not settings.object_store_bucket:
+            raise RuntimeError("S3 object storage requires GROUNDLOOM_OBJECT_STORE_BUCKET")
+        try:
+            import boto3
+        except ImportError as exc:
+            raise RuntimeError("Install the storage extra to use S3-compatible object storage") from exc
+        self.bucket = settings.object_store_bucket
+        self.client = boto3.client(
+            "s3",
+            endpoint_url=settings.object_store_endpoint,
+            region_name=settings.object_store_region,
+            aws_access_key_id=settings.object_store_access_key,
+            aws_secret_access_key=settings.object_store_secret_key,
+        )
+
+    def put_bytes(self, key: str, data: bytes) -> None:
+        self.client.put_object(Bucket=self.bucket, Key=_validate_key(key), Body=data)
+
+    def get_bytes(self, key: str) -> bytes:
+        try:
+            response = self.client.get_object(Bucket=self.bucket, Key=_validate_key(key))
+            return response["Body"].read()
+        except Exception as exc:
+            raise GroundloomError("RESOURCE_NOT_FOUND", "The artifact was not found.", 404) from exc
+
+    def exists(self, key: str) -> bool:
+        try:
+            self.client.head_object(Bucket=self.bucket, Key=_validate_key(key))
+            return True
+        except Exception:
+            return False
+
+    def health(self) -> bool:
+        try:
+            self.client.head_bucket(Bucket=self.bucket)
+            return True
+        except Exception:
+            return False
+
+
+def build_object_store(settings: Settings) -> ObjectStore:
+    if settings.object_store_backend == "local":
+        return LocalObjectStore(settings.object_store_path)
+    if settings.object_store_backend == "s3":
+        return S3ObjectStore(settings)
+    raise RuntimeError(f"Unsupported object storage backend: {settings.object_store_backend}")
