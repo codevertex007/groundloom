@@ -14,7 +14,7 @@ This is the initial planned matrix. Codex must replace planned identifiers with 
 | `FR-AUDIT-001` | `backend/app/services.py::audit`; provenance on run/content/export mutations |
 | `UI-STATE-001..002` | Browser smoke of project empty/loading/canvas states; React API error banner and reload-backed state |
 | `UI-RUN-001..002` | Browser smoke durable activity panel and rendered run status; `/v1/threads/{id}/events` replay DTO, `/events/stream` SSE smoke, and connected `/v1/runs/{id}/cancel`/`resume` controls |
-| `UI-PATCH-001..002` | Browser smoke proposal review; `test_patch_reject_and_accept_exactly_once` |
+| `UI-PATCH-001..002` | Browser smoke proposal review plus `frontend/e2e/groundloom.spec.js` rejection path; `test_patch_reject_and_accept_exactly_once` |
 | `UI-CITE-001`, `UI-A11Y-001` | Canvas citation panel and keyboard `Ctrl/Cmd+K`, `Ctrl/Cmd+Enter`; `frontend/src/api.test.js` reconnect/error assertions; `frontend/src/ui-contract.test.js` surface/dialog/keyboard semantics; `frontend/src/components.test.jsx` actual component rendering; `frontend/e2e/groundloom.spec.js` real-browser journey; visual/screen-reader evidence remains release work |
 | `UI-SETTINGS-*`, `PREF-*` | `backend/tests/test_api_vertical_slice.py::test_workspace_preferences_are_typed_audited_pinned_and_idempotent`; connected Settings modal; migration 007 |
 | `NFR-REL-001..004` | `backend/tests/test_adapters_and_jobs.py::test_ingestion_worker_reclaims_and_replays_a_queued_job`, `::test_external_adapters_classify_outages_without_leaking_provider_errors`; `backend/tests/test_api_vertical_slice.py` replay/idempotency tests; backup/restore and live failure injection remain release evidence |

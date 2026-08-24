@@ -46,6 +46,40 @@ test("creates a project, runs the persistent collaborator, reviews, and accepts 
   ).not.toBeVisible();
 });
 
+test("rejects a proposed change without changing canonical content", async ({
+  page,
+}) => {
+  const projectName = `Rejected project ${Date.now()}`;
+  await page.goto("/");
+  await page
+    .locator(".page-header")
+    .getByRole("button", { name: "New Project", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Start a grounded workspace",
+  });
+  await dialog.getByLabel("Project name").fill(projectName);
+  await dialog
+    .getByLabel("Project brief")
+    .fill("Create a reviewable note that can be rejected safely.");
+  await dialog
+    .getByRole("button", { name: "Create project", exact: true })
+    .click();
+  await expect(page.getByText(projectName, { exact: true })).toBeVisible();
+
+  await page
+    .getByRole("textbox", { name: "Ask Copilot, or describe a change…" })
+    .fill("Draft a change that the reviewer will reject.");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(page.getByText("PROPOSED CHANGE", { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.getByRole("button", { name: "Reject", exact: true }).click();
+  await expect(page.getByText("PROPOSED CHANGE", { exact: true })).not.toBeVisible();
+  await page.getByRole("button", { name: /^Content/ }).click();
+  await expect(page.getByText("Content is empty", { exact: true })).toBeVisible();
+});
+
 test("persists settings and exposes the command palette navigation", async ({
   page,
 }) => {
