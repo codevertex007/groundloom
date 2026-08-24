@@ -354,7 +354,7 @@ def project_dto(db: Session, project: Project) -> dict[str, Any]:
         "source_count": source_count,
         "section_count": section_count,
         "latest_run_status": run.status if run else None,
-        "updated_at": project.updated_at,
+        "updated_at": project.updated_at.isoformat() if project.updated_at else None,
     }
 
 

@@ -73,6 +73,15 @@ def test_project_source_grounded_run_and_replay(tmp_path):
     assert all(item["seq"] > events.json()[2]["seq"] for item in replay.json())
 
 
+def test_project_create_is_idempotent(tmp_path):
+    api = client(tmp_path)
+    payload = {"name": "Retry safe", "project_type": "brief", "brief": "Create once"}
+    first = api.post("/v1/projects", headers=headers(**{"Idempotency-Key": "project-1"}), json=payload)
+    second = api.post("/v1/projects", headers=headers(**{"Idempotency-Key": "project-1"}), json=payload)
+    assert first.status_code == 201 and second.status_code == 201
+    assert first.json()["id"] == second.json()["id"]
+
+
 def test_source_revision_is_immutable_and_keeps_lineage(tmp_path):
     api = client(tmp_path)
     first = base64.b64encode(b"First approved guidance.").decode()

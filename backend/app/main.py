@@ -15,6 +15,7 @@ from .models import (
     AgentRun,
     AgentThread,
     ExportJob,
+    IdempotencyRecord,
     OutlineVersion,
     Patch,
     Project,
@@ -61,6 +62,7 @@ from .services import (
     read_memory,
     read_passage,
     reject_patch,
+    remember_idempotency,
     search_evidence,
     seed_local,
     start_run,
@@ -193,8 +195,25 @@ def register_routes(app: FastAPI) -> FastAPI:
         ctx: RuntimeContext = Depends(get_ctx),
         idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ):
+        if idempotency_key:
+            existing = (
+                db.query(IdempotencyRecord)
+                .filter_by(workspace_id=ctx.workspace_id, key=idempotency_key)
+                .first()
+            )
+            if existing:
+                if existing.operation != "project.create":
+                    raise GroundloomError(
+                        "IDEMPOTENCY_CONFLICT",
+                        "The idempotency key was used for another operation.",
+                        409,
+                    )
+                return existing.response_json
         project = create_project(db, ctx, body)
-        return project_dto(db, project)
+        response = project_dto(db, project)
+        response = remember_idempotency(db, ctx, idempotency_key, "project.create", response)
+        db.commit()
+        return response
 
     @app.get("/v1/projects/{project_id}", response_model=ProjectDetail)
     def project_get(
