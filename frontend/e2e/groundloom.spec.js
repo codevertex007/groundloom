@@ -85,3 +85,48 @@ test("projects surface has no serious or critical accessibility violations", asy
   );
   expect(blocking, JSON.stringify(blocking, null, 2)).toEqual([]);
 });
+
+test("uploads evidence, grounds a project, and navigates a citation", async ({
+  page,
+}) => {
+  const projectName = `Evidence project ${Date.now()}`;
+  await page.goto("/");
+  await page.getByRole("button", { name: "Sources", exact: true }).click();
+  await expect(page.getByRole("heading", { name: "Sources", exact: true })).toBeVisible();
+
+  await page.locator('input[type="file"]').first().setInputFiles({
+    name: "field-guide.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Use 10 Nm for the service fastener. Inspect the seal before torqueing."),
+  });
+  await expect(page.getByText("field-guide", { exact: true })).toBeVisible();
+  await expect(page.getByText("ready", { exact: true })).toBeVisible();
+
+  await page.getByRole("button", { name: "Projects", exact: true }).click();
+  await page
+    .locator(".page-header")
+    .getByRole("button", { name: "New Project", exact: true })
+    .click();
+  const dialog = page.getByRole("dialog", {
+    name: "Start a grounded workspace",
+  });
+  await dialog.getByLabel("Project name").fill(projectName);
+  await dialog
+    .getByLabel("Project brief")
+    .fill("Create a grounded maintenance note from the field guide.");
+  await dialog.locator(".select-list button").filter({ hasText: "field-guide" }).click();
+  await dialog.getByRole("button", { name: "Create project", exact: true }).click();
+
+  await expect(page.getByText(projectName, { exact: true })).toBeVisible();
+  await page
+    .getByRole("textbox", { name: "Ask Copilot, or describe a change…" })
+    .fill("Draft a cited maintenance note about the service fastener.");
+  await page.getByRole("button", { name: "Send message", exact: true }).click();
+  await expect(page.getByText("PROPOSED CHANGE", { exact: true })).toBeVisible({
+    timeout: 15_000,
+  });
+  await page.getByRole("button", { name: "Accept changes", exact: true }).click();
+  await page.getByRole("button", { name: /^Content/ }).click();
+  await page.getByRole("button", { name: /cited/ }).first().click();
+  await expect(page.getByText("IMMUTABLE EVIDENCE", { exact: true })).toBeVisible();
+});
