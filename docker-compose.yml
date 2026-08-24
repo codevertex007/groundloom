@@ -37,9 +37,11 @@ services:
       minio:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
-    command: >-
-      mc alias set local http://minio:9000 groundloom groundloom-local-only
-      && mc mb --ignore-existing local/groundloom
+    command:
+      - >-
+        mc alias set local http://minio:9000 groundloom groundloom-local-only
+        && mc mb --ignore-existing local/groundloom
+    restart: "no"
 volumes:
   groundloom-postgres:
   groundloom-minio:

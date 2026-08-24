@@ -18,6 +18,7 @@ BUDGET_CONTROLS_MIGRATION_ID = "010_budget_controls"
 POSTGRES_RLS_MIGRATION_ID = "011_postgres_rls_tenant_isolation"
 ACTIVE_AGENT_TURN_MIGRATION_ID = "012_active_agent_turn_uniqueness"
 WORKER_ROLE_RLS_MIGRATION_ID = "013_worker_role_rls_boundary"
+PROJECT_PRIMARY_KEY_MIGRATION_ID = "014_project_id_primary_key"
 
 _RLS_WORKSPACE_TABLES = (
     "workspace_preferences",
@@ -75,6 +76,14 @@ def apply_migrations(database_url: str) -> None:
     from . import models  # noqa: F401
 
     engine = make_engine(database_url)
+    if engine.dialect.name == "postgresql":
+        with engine.begin() as connection:
+            inspector = inspect(connection)
+            if inspector.has_table("projects"):
+                project_pk = inspector.get_pk_constraint("projects").get("constrained_columns")
+                if project_pk == ["workspace_id", "id"]:
+                    connection.execute(text("ALTER TABLE projects DROP CONSTRAINT projects_pkey"))
+                    connection.execute(text("ALTER TABLE projects ADD PRIMARY KEY (id)"))
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
         connection.execute(
@@ -96,6 +105,7 @@ def apply_migrations(database_url: str) -> None:
             POSTGRES_RLS_MIGRATION_ID,
             ACTIVE_AGENT_TURN_MIGRATION_ID,
             WORKER_ROLE_RLS_MIGRATION_ID,
+            PROJECT_PRIMARY_KEY_MIGRATION_ID,
         ]
         preference_columns = {
             column["name"] for column in inspect(engine).get_columns("workspace_preferences")

@@ -76,7 +76,9 @@ class Membership(TimeStamped, Base):
 
 class Project(TimeStamped, Base):
     __tablename__ = "projects"
-    workspace_id: Mapped[str] = mapped_column(ForeignKey("workspaces.id"), primary_key=True)
+    workspace_id: Mapped[str] = mapped_column(
+        ForeignKey("workspaces.id"), nullable=False, index=True
+    )
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     name: Mapped[str] = mapped_column(String(200), nullable=False)
     project_type: Mapped[str] = mapped_column(String(80), nullable=False)

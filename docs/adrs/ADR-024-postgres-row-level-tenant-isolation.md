@@ -33,5 +33,8 @@ they do not receive end-user tenant context.
 
 Migrations `011_postgres_rls_tenant_isolation` and
 `013_worker_role_rls_boundary` are forward-only and idempotently recreate the
-policies. Live policy behavior, role grants, and previous-release migration
-rehearsal still require a real PostgreSQL deployment gate.
+policies. Migration `014_project_id_primary_key` repairs the original
+composite project key before metadata creation so the existing
+`project_id -> projects.id` foreign-key contract is valid in PostgreSQL. Live
+policy behavior, role grants, and previous-release migration rehearsal still
+require a real PostgreSQL deployment gate.

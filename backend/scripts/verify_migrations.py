@@ -29,6 +29,7 @@ if __name__ == "__main__":
             "011_postgres_rls_tenant_isolation",
             "012_active_agent_turn_uniqueness",
             "013_worker_role_rls_boundary",
+            "014_project_id_primary_key",
         ]
         if applied != expected:
             raise SystemExit(f"Unexpected migration sequence: {applied}")
