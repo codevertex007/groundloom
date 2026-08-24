@@ -110,10 +110,16 @@ def test_plan_approval_interrupt_resumes_same_run_and_thread(tmp_path):
     assert approval["status"] == "pending"
     resolved = api.post(
         f"/v1/approvals/{approval['id']}/resolve",
-        headers=headers(),
+        headers=headers(**{"Idempotency-Key": "approval-decision-1"}),
         json={"decision": "approved", "reason": "Plan matches the brief."},
     )
     assert resolved.status_code == 200 and resolved.json()["status"] == "approved"
+    replay = api.post(
+        f"/v1/approvals/{approval['id']}/resolve",
+        headers=headers(**{"Idempotency-Key": "approval-decision-1"}),
+        json={"decision": "approved", "reason": "A different retry payload."},
+    )
+    assert replay.status_code == 200 and replay.json() == resolved.json()
     resumed = api.get(f"/v1/runs/{run['id']}", headers=headers()).json()
     assert resumed["status"] == "completed"
     assert resumed["thread_id"] == run["thread_id"]

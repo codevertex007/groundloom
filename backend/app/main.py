@@ -438,8 +438,20 @@ def register_routes(app: FastAPI) -> FastAPI:
         request: Request,
         db: Session = Depends(get_db),
         ctx: RuntimeContext = Depends(get_ctx),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
     ):
-        return resolve_approval(
+        key = body.idempotency_key or idempotency_key
+        if key:
+            existing = db.query(IdempotencyRecord).filter_by(workspace_id=ctx.workspace_id, key=key).first()
+            if existing:
+                if existing.operation != "approval.resolve":
+                    raise GroundloomError(
+                        "IDEMPOTENCY_CONFLICT",
+                        "The idempotency key was used for another operation.",
+                        409,
+                    )
+                return existing.response_json
+        result = resolve_approval(
             db,
             ctx,
             approval_id,
@@ -447,6 +459,9 @@ def register_routes(app: FastAPI) -> FastAPI:
             body.reason,
             request.app.state.settings,
         )
+        result = remember_idempotency(db, ctx, key, "approval.resolve", result)
+        db.commit()
+        return result
 
     @app.get("/v1/sources", response_model=list[SourceOut])
     def sources_get(db: Session = Depends(get_db), ctx: RuntimeContext = Depends(get_ctx)):

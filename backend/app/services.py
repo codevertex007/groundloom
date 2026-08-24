@@ -478,7 +478,7 @@ def approval_dto(approval: ApprovalRequest) -> dict[str, Any]:
         "payload": approval.payload_json,
         "decision_reason": approval.decision_reason,
         "decided_by": approval.decided_by,
-        "decided_at": approval.decided_at,
+        "decided_at": approval.decided_at.isoformat() if approval.decided_at else None,
     }
 
 
