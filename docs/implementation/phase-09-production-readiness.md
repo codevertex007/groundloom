@@ -2,7 +2,7 @@
 
 ## Checklist
 
-- [ ] `IMPL-09-001` Close/accept all release-blocking requirements, risks, and open decisions.
+- [ ] `IMPL-09-001` Close/accept all release-blocking requirements, risks, and open decisions; the external release-evidence register is complete, but live acceptance remains required.
 - [ ] `IMPL-09-002` Complete bidirectional requirements-test-code evidence matrix.
 - [ ] `IMPL-09-003` Run full CI, eval, security, accessibility, load, migration, backup/restore gates on release candidate.
 - [ ] `IMPL-09-004` Validate production configuration/secrets/domains/storage/identity/telemetry/retention.

@@ -23,7 +23,7 @@ LangGraph `messages`/`updates` normalization, bounded tool/subagent progress,
 and cancellation checks; live model execution and provider-degradation
 evidence remain deployment gates.
 
-A waiver names the exact gate, evidence, risk owner, expiry, compensating controls, and approval. Tenant isolation, unauthorized canonical mutation, and data-loss risks are not waivable for launch.
+A waiver names the exact gate, evidence, risk owner, expiry, compensating controls, and approval. The external release-evidence register in [`assumptions-risks-open-questions.md`](../governance/assumptions-risks-open-questions.md) is the source for those owners and review points. Tenant isolation, unauthorized canonical mutation, and data-loss risks are not waivable for launch.
 
 Detailed local command output and the external-evidence boundary are recorded in
 [`release-candidate-evidence.md`](release-candidate-evidence.md).
