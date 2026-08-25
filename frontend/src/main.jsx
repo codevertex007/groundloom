@@ -1456,6 +1456,70 @@ function OutlineView({ outline }) {
     </div>
   );
 }
+function listItemText(item) {
+  if (typeof item === "string") return item;
+  if (item && typeof item === "object") {
+    return item.text || item.label || item.question || JSON.stringify(item);
+  }
+  return String(item ?? "");
+}
+
+function TypedBlockBody({ block }) {
+  const payload = block.payload || {};
+  if (block.type === "heading") {
+    return <h1>{payload.text || ""}</h1>;
+  }
+  if (["ordered_procedure", "quiz"].includes(block.type)) {
+    return (
+      <ol>
+        {(payload.items || []).map((item, index) => (
+          <li key={`${block.id}-item-${index}`}>{listItemText(item)}</li>
+        ))}
+      </ol>
+    );
+  }
+  if (["unordered_procedure", "objective_list", "checklist", "source_list"].includes(block.type)) {
+    return (
+      <ul>
+        {(payload.items || []).map((item, index) => (
+          <li key={`${block.id}-item-${index}`}>{listItemText(item)}</li>
+        ))}
+      </ul>
+    );
+  }
+  if (block.type === "table") {
+    const columns = Array.isArray(payload.columns) ? payload.columns : [];
+    const rows = Array.isArray(payload.rows) ? payload.rows : [];
+    return (
+      <div className="typed-table" role="region" aria-label="Content table" tabIndex="0">
+        <table>
+          <thead>
+            <tr>{columns.map((column) => <th key={column}>{column}</th>)}</tr>
+          </thead>
+          <tbody>
+            {rows.map((row, rowIndex) => (
+              <tr key={`${block.id}-row-${rowIndex}`}>
+                {columns.map((_, columnIndex) => (
+                  <td key={`${block.id}-cell-${rowIndex}-${columnIndex}`}>{String(row[columnIndex] ?? "")}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    );
+  }
+  if (block.type === "figure") {
+    return (
+      <figure className="figure-placeholder" role="img" aria-label={payload.alt_text || "Figure placeholder"}>
+        <span>{payload.asset_ref ? `Asset: ${payload.asset_ref}` : "Figure placeholder"}</span>
+        <figcaption>{payload.alt_text || ""}</figcaption>
+      </figure>
+    );
+  }
+  return <p>{payload.text || ""}</p>;
+}
+
 function ContentView({ content, onCitation }) {
   return (
     <div className="document-pane content-pane">
@@ -1463,11 +1527,7 @@ function ContentView({ content, onCitation }) {
         content.blocks.map((block) => (
           <article className={`content-block ${block.type}`} key={block.id}>
             <span className="block-label">{block.type}</span>
-            {block.type === "heading" ? (
-              <h1>{block.payload.text}</h1>
-            ) : (
-              <p>{block.payload.text}</p>
-            )}
+            <TypedBlockBody block={block} />
             {block.citations?.map((citation) => (
               <button
                 className="citation"

@@ -16,6 +16,7 @@ test("reference surfaces and connected mutations are present in the UI", () => {
     "SkillsScreen",
     "Canvas",
     "CitationPanel",
+    "TypedBlockBody",
     "ValidationPanel",
     "DiffCard",
     "SettingsModal",
@@ -52,6 +53,9 @@ test("reference surfaces and connected mutations are present in the UI", () => {
     "subscribeToEvents",
   ]) {
     assert.match(source, new RegExp(contract.replaceAll("/", "\\/")));
+  }
+  for (const typedBlock of ["ordered_procedure", "source_list", "typed-table", "figure-placeholder"]) {
+    assert.match(source, new RegExp(typedBlock));
   }
 });
 

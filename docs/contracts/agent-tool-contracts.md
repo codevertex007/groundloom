@@ -11,7 +11,7 @@ Initial tool registry:
 | `TOOL-RET-002 read_source_passage` | Read | Authorized immutable passage/neighbors |
 | `TOOL-CONT-001 read_content_blocks` | Read | Versioned typed blocks |
 | `TOOL-CONT-002 propose_outline` | Proposal | Durable reviewable outline proposal |
-| `TOOL-CONT-003 propose_block_patch` | Proposal | Validated non-canonical patch |
+| `TOOL-CONT-003 propose_block_patch` | Proposal | Validated non-canonical patch; operations are limited to the supported typed block payload contracts |
 | `TOOL-VAL-001 submit_draft_for_validation` | Check | Validation execution/findings |
 | `TOOL-VAL-002 request_quality_check` | Check | Bounded semantic review |
 | `TOOL-EXP-001 start_export` | Job request | Authorized/approval-gated export job |

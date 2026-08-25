@@ -1,6 +1,6 @@
 # Content and versioning component
 
-Core block types: heading, paragraph, ordered/unordered procedure, objective list, warning/note, table, figure/asset placeholder, quiz/checklist, and source list. Each block has stable ID, order key, typed payload, citations, provenance, and version metadata.
+Core block types: heading, paragraph, ordered/unordered procedure, objective list, warning/note, table, figure/asset placeholder, quiz/checklist, and source list. Each block has stable ID, order key, typed payload, citations, provenance, and version metadata. The API deterministically validates the supported type and bounded payload shape before a proposal can be stored or accepted.
 
 Content versions and outline versions are immutable snapshots or immutable versioned block membership. Project current pointers change transactionally. Provenance records run/tool/subagent, prompt/model profile, pinned sources/skills/retrieval/evaluator config, and parent version.
 

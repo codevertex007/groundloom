@@ -520,3 +520,50 @@ def test_validation_returns_deterministic_and_semantic_results(tmp_path):
     assert body["summary"]["semantic"]["provider"] == "local-deterministic"
     assert body["summary"]["semantic"]["verdict"] == "needs_revision"
     assert any(finding["category"] == "semantic" for finding in body["findings"])
+
+
+def test_patch_rejects_unknown_and_malformed_typed_content_blocks(tmp_path):
+    api = client(tmp_path)
+    project = api.post(
+        "/v1/projects",
+        headers=headers(),
+        json={"name": "Typed blocks", "project_type": "brief", "brief": "Typed content"},
+    ).json()
+    content = api.get(f"/v1/projects/{project['id']}/content", headers=headers()).json()
+    response = api.post(
+        f"/v1/projects/{project['id']}/patches",
+        headers=headers(),
+        json={
+            "base_content_version_id": content["version"]["id"],
+            "summary": "Malformed typed block",
+            "operations": [
+                {
+                    "op": "insert_after",
+                    "payload": {"block_type": "unknown_block", "text": "not allowed"},
+                }
+            ],
+        },
+    )
+    assert response.status_code == 422
+    codes = {finding["code"] for finding in response.json()["details"]["findings"]}
+    assert "UNKNOWN_BLOCK_TYPE" in codes
+
+    malformed = api.post(
+        f"/v1/projects/{project['id']}/patches",
+        headers=headers(),
+        json={
+            "base_content_version_id": content["version"]["id"],
+            "summary": "Malformed table",
+            "operations": [
+                {
+                    "op": "insert_after",
+                    "payload": {"block_type": "table", "columns": ["A", "B"], "rows": [["only one"]]},
+                }
+            ],
+        },
+    )
+    assert malformed.status_code == 422
+    assert any(
+        finding["code"] == "INVALID_BLOCK_PAYLOAD"
+        for finding in malformed.json()["details"]["findings"]
+    )

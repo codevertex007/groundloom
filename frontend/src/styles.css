@@ -1102,6 +1102,70 @@ button {
   color: #3f3a34;
   white-space: pre-line;
 }
+.content-block ol,
+.content-block ul {
+  font:
+    400 14px/1.7 Georgia,
+    serif;
+  max-width: 650px;
+  margin: 10px 0 0 22px;
+  padding: 0;
+  color: #3f3a34;
+}
+.content-block li + li {
+  margin-top: 6px;
+}
+.typed-table {
+  max-width: 760px;
+  margin-top: 12px;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--panel);
+}
+.typed-table table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+  color: #3f3a34;
+}
+.typed-table th,
+.typed-table td {
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  vertical-align: top;
+}
+.typed-table th {
+  background: var(--panel-2);
+  font:
+    600 9px ui-monospace,
+    monospace;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+}
+.typed-table tr:last-child td {
+  border-bottom: 0;
+}
+.figure-placeholder {
+  max-width: 650px;
+  margin: 12px 0 0;
+  padding: 28px 20px;
+  border: 1px dashed var(--border-strong);
+  border-radius: 6px;
+  background: var(--panel-2);
+  color: var(--muted);
+  text-align: center;
+  font-size: 12px;
+}
+.figure-placeholder figcaption {
+  margin-top: 8px;
+  color: #3f3a34;
+  font:
+    400 13px/1.5 Georgia,
+    serif;
+}
 .citation {
   border: 0;
   background: var(--accent-soft);

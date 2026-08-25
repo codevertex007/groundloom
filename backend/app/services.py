@@ -18,6 +18,7 @@ from sqlalchemy.orm import Session
 
 from .checkpoints import save_checkpoint
 from .config import Settings
+from .content_types import validate_block_payload
 from .context import RuntimeContext
 from .db import set_tenant_context, set_worker_context
 from .errors import GroundloomError
@@ -2827,6 +2828,13 @@ def validate_patch_operations(
     allowed_versions = set(config.source_version_ids if config else [])
     findings = []
     for operation in body.operations:
+        if operation.op in {"insert_after", "replace_block"}:
+            payload = operation.payload or {}
+            block_type = payload.get("block_type")
+            if operation.op == "replace_block" and not block_type and operation.block_id:
+                existing = next((block for block in blocks if block.id == operation.block_id), None)
+                block_type = existing.block_type if existing else None
+            findings.extend(validate_block_payload(block_type, payload))
         if (
             operation.op in {"replace_block", "delete_block", "move_block", "replace_citations"}
             and operation.block_id not in known
@@ -2918,6 +2926,23 @@ def accept_patch(
         return patch, version
     if patch.status != "presented":
         raise GroundloomError("INVALID_STATE", "Only a presented patch can be accepted.", 409)
+    validation = validate_patch_operations(
+        db,
+        ctx,
+        patch.project_id,
+        PatchCreate(
+            base_content_version_id=patch.base_content_version_id,
+            operations=patch.operations,
+            summary=patch.summary,
+        ),
+    )
+    if validation["status"] != "valid":
+        raise GroundloomError(
+            "INVALID_PROPOSAL",
+            "The proposal no longer satisfies the typed content contract.",
+            422,
+            details=validation,
+        )
     project = _project(db, ctx, patch.project_id)
     if (
         project.current_content_version_id != body.expected_current_version_id
@@ -3105,19 +3130,18 @@ def validate_content(
     version, blocks = content_blocks(db, ctx, project_id, version_id)
     findings: list[dict[str, Any]] = []
     for block in blocks:
-        if (
-            block.block_type in {"paragraph", "warning", "note"}
-            and not block.payload.get("text", "").strip()
-        ):
+        for payload_finding in validate_block_payload(block.block_type, block.payload):
             findings.append(
                 {
                     "severity": "error",
                     "category": "structure",
                     "block_id": block.id,
-                    "message": "Text block is empty.",
+                    "code": payload_finding["code"],
+                    "message": payload_finding["message"],
                 }
             )
-        if block.block_type == "paragraph" and block.payload.get("text") and not block.citations:
+        payload = block.payload if isinstance(block.payload, dict) else {}
+        if block.block_type == "paragraph" and payload.get("text") and not block.citations:
             findings.append(
                 {
                     "severity": "warning",
