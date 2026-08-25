@@ -34,6 +34,16 @@ def test_provider_stream_projects_bounded_tool_and_subagent_progress():
             "messages",
             (SimpleNamespace(id="ai-2", type="ai", content="private model text"), {"langgraph_node": "agent"}),
         ),
+        (
+            "updates",
+            {
+                "agent": {
+                    "messages": [
+                        SimpleNamespace(id="ai-2", type="ai", content="private model text")
+                    ]
+                }
+            },
+        ),
     ]
 
     result = consume_provider_stream(stream, progress_callback=lambda event, payload: events.append((event, payload)))

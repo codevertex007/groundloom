@@ -87,23 +87,27 @@ def consume_provider_stream(
     state: dict[str, Any] = {}
     messages: list[Any] = []
     message_positions: dict[str, int] = {}
+    streamed_messages: list[Any] = []
+    streamed_message_positions: dict[str, int] = {}
     emitted_nodes: set[str] = set()
     emitted_tool_starts: set[str] = set()
     emitted_tool_completions: set[str] = set()
     cancelled = False
 
-    def remember_messages(values: Any) -> list[Any]:
+    def remember_messages(
+        values: Any, target: list[Any], positions: dict[str, int]
+    ) -> list[Any]:
         if not isinstance(values, (list, tuple)):
             return []
         normalized = list(values)
         for message in normalized:
             message_id = _message_id(message)
-            if message_id is not None and message_id in message_positions:
-                messages[message_positions[message_id]] = message
+            if message_id is not None and message_id in positions:
+                target[positions[message_id]] = message
             else:
                 if message_id is not None:
-                    message_positions[message_id] = len(messages)
-                messages.append(message)
+                    positions[message_id] = len(target)
+                target.append(message)
         return normalized
 
     def emit(event_type: str, payload: dict[str, Any]) -> None:
@@ -118,7 +122,9 @@ def consume_provider_stream(
         if mode == "messages":
             message = chunk[0] if isinstance(chunk, tuple) and chunk else chunk
             metadata = chunk[1] if isinstance(chunk, tuple) and len(chunk) > 1 else {}
-            remember_messages([message])
+            # Token chunks are useful for liveness but are not authoritative
+            # state; updates below contain the ordered checkpointed messages.
+            remember_messages([message], streamed_messages, streamed_message_positions)
             if isinstance(metadata, dict):
                 node = str(metadata.get("langgraph_node") or metadata.get("node") or "model")[:120]
             else:
@@ -138,7 +144,7 @@ def consume_provider_stream(
             if not isinstance(update, dict):
                 continue
             state.update({key: value for key, value in update.items() if key != "messages"})
-            update_messages = remember_messages(update.get("messages"))
+            update_messages = remember_messages(update.get("messages"), messages, message_positions)
             for message in update_messages:
                 tool_calls = _tool_calls(message)
                 for call in tool_calls:
@@ -159,7 +165,7 @@ def consume_provider_stream(
                         if name == "task":
                             emit("subagent.completed", {"tool_name": name, "call_id": call_id, "node": node})
 
-    state["messages"] = messages
+    state["messages"] = messages or streamed_messages
     if cancelled:
         state["cancelled"] = True
     return state
