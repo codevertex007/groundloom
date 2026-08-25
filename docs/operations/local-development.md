@@ -16,6 +16,11 @@ The delegated specialist worker can be run with python
 backend/scripts/delegated_worker.py.
 The durable primary-agent worker can be run with python
 backend/scripts/agent_worker.py --once.
+The outbox publisher requires an explicit sink and can be exercised with
+`GROUNDLOOM_OUTBOX_DELIVERY_PROVIDER=webhook`,
+`GROUNDLOOM_OUTBOX_DELIVERY_URL=<local-relay>`, and
+`python backend/scripts/outbox_worker.py --once`; with the default disabled
+sink it fails clearly and never marks events delivered.
 development adapter renders exports inline by default; set
 GROUNDLOOM_EXPORT_INLINE_LOCAL=false to exercise the durable export worker.
 

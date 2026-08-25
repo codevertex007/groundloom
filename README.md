@@ -95,6 +95,8 @@ python backend/scripts/retention_worker.py
 python backend/scripts/index_worker.py
 python backend/scripts/delegated_worker.py
 python backend/scripts/agent_worker.py --once
+# Requires GROUNDLOOM_OUTBOX_DELIVERY_PROVIDER=webhook and a configured sink.
+python backend/scripts/outbox_worker.py --once
 
 # Optional disposable local recovery exercise
 cd ..

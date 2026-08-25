@@ -62,3 +62,8 @@ accepts `Idempotency-Key`. Published bytes cannot be repaired in place.
 or visible workspace skill into a new workspace-scoped draft. The fork never
 publishes automatically, accepts an optional replacement slug/name/description,
 and supports the same idempotent replay boundary.
+
+Transactional outbox rows are not public REST resources. The configured
+`outbox_worker.py` publishes their normalized envelopes to the deployment sink
+with at-least-once delivery; each envelope carries its stable outbox ID for
+consumer deduplication. The disabled local sink is never reported as success.

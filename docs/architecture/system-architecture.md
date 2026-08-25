@@ -1076,6 +1076,7 @@ backend/
       agent_worker.py
       ingestion_worker.py
       export_worker.py
+      outbox_worker.py
     settings.py
     main.py
 frontend/

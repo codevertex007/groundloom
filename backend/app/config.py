@@ -57,6 +57,10 @@ class Settings(BaseSettings):
     export_inline_local: bool | None = None
     agent_inline_local: bool = True
     worker_heartbeat_timeout_seconds: int = 120
+    outbox_delivery_provider: str = "disabled"
+    outbox_delivery_url: str | None = None
+    outbox_delivery_token: str | None = None
+    outbox_delivery_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
     event_retention_days: int = 90
     auth_secret: str | None = None
     auth_mode: str = "local"
@@ -156,6 +160,7 @@ class Settings(BaseSettings):
             "agent_inline_local": self.agent_inline_local,
             "agent_max_attempts": self.agent_max_attempts,
             "event_retention_days": self.event_retention_days,
+            "outbox_delivery_provider": self.outbox_delivery_provider,
         }
         return hashlib.sha256(
             json.dumps(safe, sort_keys=True, separators=(",", ":")).encode("utf-8")
