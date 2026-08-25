@@ -218,7 +218,7 @@ test("shows reconnect state after a dropped activity stream", async ({ page }) =
 });
 
 test("renders a distinct permission-denied state", async ({ page }) => {
-  await page.route("**/v1/projects", async (route) => {
+  await page.route("**/v1/projects/page*", async (route) => {
     if (route.request().method() === "GET") {
       await route.fulfill({
         status: 403,

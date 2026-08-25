@@ -4,13 +4,13 @@ import re
 import shutil
 import time
 import zipfile
-from datetime import timedelta
+from datetime import UTC, datetime, timedelta
 from html import unescape
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -489,6 +489,48 @@ def project_dto(db: Session, project: Project) -> dict[str, Any]:
         "section_count": section_count,
         "latest_run_status": run.status if run else None,
         "updated_at": project.updated_at.isoformat() if project.updated_at else None,
+    }
+
+
+def _project_page_cursor(project: Project) -> str:
+    updated_at = project.updated_at
+    if updated_at.tzinfo is None:
+        updated_at = updated_at.replace(tzinfo=UTC)
+    raw = f"{updated_at.timestamp():.6f}:{project.id}"
+    return base64.urlsafe_b64encode(raw.encode("utf-8")).decode("ascii").rstrip("=")
+
+
+def _decode_project_page_cursor(cursor: str) -> tuple[datetime, str]:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        raw = base64.urlsafe_b64decode(padded.encode("ascii")).decode("utf-8")
+        timestamp, project_id = raw.split(":", 1)
+        return datetime.fromtimestamp(float(timestamp), UTC), project_id
+    except (ValueError, TypeError, UnicodeDecodeError) as exc:
+        raise GroundloomError("INVALID_CURSOR", "The project page cursor is invalid.", 400) from exc
+
+
+def list_project_page(
+    db: Session, ctx: RuntimeContext, *, limit: int = 50, cursor: str | None = None
+) -> dict[str, Any]:
+    """Return a bounded, workspace-scoped keyset page of project cards."""
+    query = db.query(Project).filter_by(workspace_id=ctx.workspace_id)
+    query = query.order_by(Project.updated_at.desc(), Project.id.desc())
+    if cursor:
+        timestamp, project_id = _decode_project_page_cursor(cursor)
+        if db.get_bind().dialect.name == "sqlite":
+            timestamp = timestamp.replace(tzinfo=None)
+        query = query.filter(
+            or_(
+                Project.updated_at < timestamp,
+                and_(Project.updated_at == timestamp, Project.id < project_id),
+            )
+        )
+    rows = query.limit(max(1, min(limit, 100)) + 1).all()
+    page_rows = rows[: max(1, min(limit, 100))]
+    return {
+        "items": [project_dto(db, project) for project in page_rows],
+        "next_cursor": _project_page_cursor(page_rows[-1]) if len(rows) > len(page_rows) else None,
     }
 
 

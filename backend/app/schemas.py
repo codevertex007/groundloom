@@ -61,6 +61,11 @@ class ProjectOut(ProductModel):
     updated_at: datetime
 
 
+class ProjectPage(ProductModel):
+    items: list[ProjectOut]
+    next_cursor: str | None = None
+
+
 class ProjectDetail(ProjectOut):
     config: dict[str, Any]
     thread_id: str | None = None

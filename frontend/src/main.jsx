@@ -62,6 +62,8 @@ function App() {
   const [skills, setSkills] = useState([]);
   const [activeProject, setActiveProject] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [loadingMoreProjects, setLoadingMoreProjects] = useState(false);
+  const [projectCursor, setProjectCursor] = useState(null);
   const [error, setError] = useState("");
   const [collapsed, setCollapsed] = useState(false);
   const [palette, setPalette] = useState(false);
@@ -75,17 +77,33 @@ function App() {
     setError("");
     try {
       const [p, s, k] = await Promise.all([
-        api("/v1/projects"),
+        api("/v1/projects/page?limit=50"),
         api("/v1/sources"),
         api("/v1/skills"),
       ]);
-      setProjects(p);
+      setProjects(p.items);
+      setProjectCursor(p.next_cursor);
       setSources(s);
       setSkills(k);
     } catch (e) {
       setError({ message: e.message, code: e.code, retryable: e.retryable });
     } finally {
       setLoading(false);
+    }
+  };
+  const loadMoreProjects = async () => {
+    if (!projectCursor || loadingMoreProjects) return;
+    setLoadingMoreProjects(true);
+    try {
+      const page = await api(
+        `/v1/projects/page?limit=50&cursor=${encodeURIComponent(projectCursor)}`,
+      );
+      setProjects((current) => [...current, ...page.items]);
+      setProjectCursor(page.next_cursor);
+    } catch (e) {
+      setError({ message: e.message, code: e.code, retryable: e.retryable });
+    } finally {
+      setLoadingMoreProjects(false);
     }
   };
   useEffect(() => {
@@ -161,6 +179,9 @@ function App() {
             setQuery={setProjectQuery}
             onOpen={openProject}
             onNew={() => setNewProjectOpen(true)}
+            hasMore={Boolean(projectCursor)}
+            loadingMore={loadingMoreProjects}
+            onLoadMore={loadMoreProjects}
           />
         )}
         {screen === "sources" && (
@@ -264,7 +285,17 @@ function Sidebar({
   );
 }
 
-function ProjectsScreen({ loading, projects, query, setQuery, onOpen, onNew }) {
+function ProjectsScreen({
+  loading,
+  projects,
+  query,
+  setQuery,
+  onOpen,
+  onNew,
+  hasMore,
+  loadingMore,
+  onLoadMore,
+}) {
   const [status, setStatus] = useState("all");
   const statuses = ["all", "draft", "active", "completed"];
   const shown = projects.filter(
@@ -358,6 +389,14 @@ function ProjectsScreen({ loading, projects, query, setQuery, onOpen, onNew }) {
               </div>
             </button>
           ))}
+        </div>
+      )}
+      {!loading && shown.length > 0 && hasMore && (
+        <div className="pagination-actions">
+          <button className="soft-button" onClick={onLoadMore} disabled={loadingMore}>
+            {loadingMore ? <LoaderCircle className="spin" size={15} /> : <ChevronDown size={15} />}
+            {loadingMore ? "Loading projects…" : "Load more projects"}
+          </button>
         </div>
       )}
     </section>

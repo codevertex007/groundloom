@@ -1,7 +1,7 @@
 import json
 from collections.abc import Generator
 
-from fastapi import Depends, FastAPI, File, Header, Request, UploadFile
+from fastapi import Depends, FastAPI, File, Header, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
@@ -47,6 +47,7 @@ from .schemas import (
     ProjectCreate,
     ProjectDetail,
     ProjectOut,
+    ProjectPage,
     ReadinessResponse,
     RetentionPolicyOut,
     RetentionPolicyUpdate,
@@ -75,6 +76,7 @@ from .services import (
     fork_skill,
     get_retention_policy,
     get_workspace_preferences,
+    list_project_page,
     list_run_approvals,
     list_skills,
     list_sources,
@@ -256,6 +258,15 @@ def register_routes(app: FastAPI) -> FastAPI:
             .order_by(Project.updated_at.desc())
             .all()
         ]
+
+    @app.get("/v1/projects/page", response_model=ProjectPage)
+    def projects_page(
+        limit: int = Query(default=50, ge=1, le=100),
+        cursor: str | None = Query(default=None, max_length=300),
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+    ):
+        return list_project_page(db, ctx, limit=limit, cursor=cursor)
 
     @app.post("/v1/projects", response_model=ProjectOut, status_code=201)
     def projects_create(

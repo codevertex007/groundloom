@@ -83,6 +83,43 @@ def test_project_create_is_idempotent(tmp_path):
     assert first.json()["id"] == second.json()["id"]
 
 
+def test_project_page_is_bounded_cursor_scoped_and_rejects_invalid_cursor(tmp_path):
+    api = client(tmp_path)
+    created = []
+    for index in range(3):
+        response = api.post(
+            "/v1/projects",
+            headers=headers(**{"Idempotency-Key": f"page-project-{index}"}),
+            json={"name": f"Page project {index}", "project_type": "brief", "brief": "Page me"},
+        )
+        assert response.status_code == 201
+        created.append(response.json()["id"])
+
+    first = api.get("/v1/projects/page?limit=2", headers=headers())
+    assert first.status_code == 200
+    first_page = first.json()
+    assert len(first_page["items"]) == 2
+    assert first_page["next_cursor"]
+
+    second = api.get(
+        f"/v1/projects/page?limit=2&cursor={first_page['next_cursor']}",
+        headers=headers(),
+    )
+    assert second.status_code == 200
+    second_page = second.json()
+    assert len(second_page["items"]) == 1
+    assert second_page["next_cursor"] is None
+    assert {item["id"] for item in first_page["items"] + second_page["items"]} == set(created)
+
+    invalid = api.get("/v1/projects/page?cursor=not-a-cursor", headers=headers())
+    assert invalid.status_code == 400
+    assert invalid.json()["code"] == "INVALID_CURSOR"
+    other_workspace = api.get(
+        "/v1/projects/page", headers=headers(**{"X-Workspace-ID": "other-workspace"})
+    )
+    assert other_workspace.status_code == 403
+
+
 def test_project_pins_selected_published_skill_version(tmp_path):
     api = client(tmp_path)
     skill = api.post(

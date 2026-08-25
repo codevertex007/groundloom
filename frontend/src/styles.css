@@ -269,6 +269,12 @@ button {
   grid-template-columns: repeat(auto-fill, minmax(245px, 1fr));
   gap: 12px;
 }
+
+.pagination-actions {
+  display: flex;
+  justify-content: center;
+  padding: 22px 0 4px;
+}
 .project-card {
   background: var(--panel);
   border: 1px solid var(--border);

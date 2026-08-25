@@ -26,6 +26,7 @@ test("reference surfaces and connected mutations are present in the UI", () => {
   }
   for (const contract of [
     "/v1/projects",
+    "/v1/projects/page",
     "/v1/sources",
     "/v1/skills",
     "/v1/skills/ai-drafts",

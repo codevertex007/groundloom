@@ -6,6 +6,7 @@ Core resources:
 
 ```text
 POST/GET /projects                         GET /projects/{id}
+GET      /projects/page?limit=&cursor=     (bounded keyset page)
 POST     /projects/{id}/threads/messages  GET /threads/{id}/events
 GET      /threads/{id}/events/stream      POST /sources/{id}/versions
 POST     /runs/{id}/cancel                POST /runs/{id}/resume
@@ -31,6 +32,12 @@ waiting returns `409 INVALID_STATE`; the same idempotency key replays the
 existing run.
 
 Before implementation, generate an OpenAPI document and contract tests for every operation, auth case, error, pagination, idempotency, and example. The OpenAPI is generated/validated from code but reviewed against this specification.
+
+`GET /projects/page` is the paginated project-card query. `limit` is bounded
+to 1..100 and defaults to 50. `next_cursor` is an opaque workspace-scoped
+keyset cursor; clients must not construct or interpret it. The legacy
+`GET /projects` list remains available for compatibility but is not used by
+the reference client.
 
 Export creation is idempotent and returns queued in staging/production;
 export_worker.py advances queued to rendering, storing, completed, or failed.

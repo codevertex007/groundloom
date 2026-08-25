@@ -17,7 +17,7 @@
 
 | Client surface | Real API calls |
 |---|---|
-| Projects grid/New Project | `GET /v1/projects`, `POST /v1/projects` with selected source and published skill version IDs |
+| Projects grid/New Project | `GET /v1/projects/page?limit=50&cursor=...` with opaque cursor pagination, `POST /v1/projects` with selected source and published skill version IDs |
 | Sources library/upload | `GET /v1/sources`, `POST /v1/sources/uploads`, `POST /v1/sources/{source_id}/versions`, `GET /v1/source-versions/{id}/passages/{passage_id}` |
 | Skills registry | `GET /v1/skills`, `POST /v1/skills`, `POST /v1/skills/ai-drafts`, `POST /v1/skills/{id}/fork`, `POST /v1/skill-versions/{id}/validate`, `PUT /v1/skill-versions/{id}/repair`, `POST /v1/skill-versions/{id}/publish` |
 | Canvas | `GET /v1/projects/{id}`, `/outline`, `/content`, `/patches`, `/threads/{thread_id}/events` |

@@ -4,7 +4,7 @@ The attached `docs/ref/ui/design_ref.zip` is the visual baseline. During fronten
 
 | Surface | Required states and behavior |
 |---|---|
-| Projects | Loading, empty, populated, filtered, pagination, error; status and latest durable progress |
+| Projects | Loading, empty, populated, filtered, cursor pagination/load-more, error; status and latest durable progress |
 | New Project | Type, brief, sources, active skills, validation, create, agent-start/retry |
 | Sources | Upload, scan/parse/index progress, ready, failed, version history, replace/new version |
 | Source explorer | Search, page/section navigation, passage highlight, citation back-navigation |
@@ -35,7 +35,7 @@ The archive contains one Design Canvas export, `Knowledge Platform.dc.html`, wit
 
 | Route/surface | Reference behavior observed | Groundloom implementation |
 |---|---|---|
-| `/projects` | Warm neutral workspace shell, collapsible left navigation, search/filter toolbar, cards with source/section counts and progress, empty state, New Project action | `ProjectsScreen`, real `GET /v1/projects`, loading/empty/error states |
+| `/projects` | Warm neutral workspace shell, collapsible left navigation, search/filter toolbar, cards with source/section counts and progress, cursor pagination, empty state, New Project action | `ProjectsScreen`, real `GET /v1/projects/page` with bounded opaque cursor, loading/empty/error states |
 | `/sources` | Searchable source library, file-type badges, source rows and processing/version status | `SourcesScreen`, upload/finalize against `POST /v1/sources/uploads`, immutable version-history modal, and source-version upload against `POST /v1/sources/{source_id}/versions` |
 | `/skills` | Starter/organization/workspace skill cards and filters, package descriptions, version detail, create/fork menu, AI-author affordance, validation/repair/publication controls | `SkillsScreen`, scoped list/filter plus AI-draft/fork/validate/repair/publish API path, immutable version history, scoped package metadata |
 | `/projects/new` | Project type, brief, source selection, active published-skill selection, validation before create | `NewProjectModal`, real project command with selected ready source and published skill versions |
