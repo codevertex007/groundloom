@@ -256,13 +256,12 @@ function Sidebar({
     <aside className={`sidebar ${collapsed ? "collapsed" : ""}`}>
       <div className="brand">
         <div className="brand-mark">G</div>
-        {!collapsed && (
-          <>
-            <span>groundloom</span>
-            <span className="beta">STUDIO</span>
-          </>
-        )}
+        <div className="brand-copy">
+          <span className="brand-name">groundloom</span>
+          <span className="brand-subtitle">Knowledge Studio</span>
+        </div>
       </div>
+      <div className="nav-label">Workspace</div>
       <div className="nav-group">
         {item("projects", "Projects", FolderOpen)}
         {item("sources", "Sources", Library)}

@@ -15,6 +15,7 @@ const skillAuthor = await readFile(
   new URL("./ai/SkillAuthorPanel.jsx", import.meta.url),
   "utf8",
 );
+const styles = await readFile(new URL("./styles.css", import.meta.url), "utf8");
 const uiSource = `${source}\n${components}\n${aiComponents}\n${skillAuthor}`;
 
 test("reference surfaces and connected mutations are present in the UI", () => {
@@ -84,4 +85,15 @@ test("interactive reference states expose keyboard and assistive semantics", () 
   assert.match(source, /event\.key === "Enter" \|\| event\.key === " "/);
   assert.match(source, /aria-pressed=\{status !== "all"\}/);
   assert.match(source, /Filter skills by scope/);
+});
+
+test("reference shell keeps branding compact and prevents narrow viewport overflow", () => {
+  assert.match(source, /className="brand-copy"/);
+  assert.match(source, /className="brand-subtitle"/);
+  assert.match(source, /className="nav-label"/);
+  assert.match(styles, /--panel: #121518/);
+  assert.match(styles, /\.main-shell[\s\S]*overflow-x: hidden/);
+  assert.match(styles, /\.sidebar \.brand-copy[\s\S]*display: none/);
+  assert.match(styles, /\.toolbar \.search-box[\s\S]*flex: 1 1 100%/);
+  assert.match(styles, /\.project-grid[\s\S]*grid-template-columns: 1fr/);
 });
