@@ -65,7 +65,8 @@ test("creates a project, runs the persistent collaborator, reviews, and accepts 
   await page.getByRole("button", { name: /^Content/ }).click();
   await page.getByRole("button", { name: "Review", exact: true }).click();
   const review = page.getByRole("dialog", { name: "Validation checklist" });
-  await expect(review.getByText("Ready for review", { exact: true })).toBeVisible();
+  await expect(review.getByText("Needs revision", { exact: true })).toBeVisible();
+  await expect(review.getByText("semantic", { exact: true })).toBeVisible();
   await review.getByRole("button", { name: "Done", exact: true }).click();
   await expect(
     page.getByText("Content is empty", { exact: true }),

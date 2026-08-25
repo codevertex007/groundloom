@@ -1,6 +1,6 @@
 # UI end-to-end scenarios
 
-- `TEST-E2E-001`: create project → clarify → approve plan → stream modules → reload/resume → citation. Covered by `groundloom.spec.js` project and approval tests.
+- `TEST-E2E-001`: create project → clarify → approve plan → stream modules → reload/resume → citation. Covered by `groundloom.spec.js` project and approval tests; the review step asserts a semantic `Needs revision` result when the draft has no selected evidence.
 - `TEST-E2E-002`: targeted simplification → diff → reject → canonical unchanged.
 - `TEST-E2E-003`: evidence-backed patch → accept → exactly one new version; stale concurrent accept conflicts.
 - `TEST-E2E-004`: upload/retry/version source → old run remains pinned; new run opts into revision. The browser suite covers immutable version history and revision upload.

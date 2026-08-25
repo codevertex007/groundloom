@@ -13,7 +13,7 @@ The attached `docs/ref/ui/design_ref.zip` is the visual baseline. During fronten
 | Project canvas | Persistent agent panel, outline/content tabs, active module/block, citations, run activity |
 | Outline | Proposed/approved versions, module statuses, edit/reorder, approval/rejection |
 | Content | Typed block rendering, selection, citation markers, proposed additions/deletions/changes |
-| Review | Deterministic checklist, semantic evaluation, evidence, override with reason |
+| Review | Deterministic checklist, semantic evaluation, evidence, override with reason; source-less drafts surface citation-required semantic findings as `Needs revision` |
 | Export/preview | Version/template selection, approval if configured, job status, artifact download |
 | Settings | User/workspace preferences, render defaults, model/policy visibility by role |
 | Command palette | Navigation and deterministic commands; unavailable commands explain why |
