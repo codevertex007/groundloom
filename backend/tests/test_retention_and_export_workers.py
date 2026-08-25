@@ -1,11 +1,14 @@
 import base64
+from io import BytesIO
 from pathlib import Path
+from types import SimpleNamespace
+from zipfile import ZipFile
 
 from app.config import Settings
 from app.context import RuntimeContext
 from app.main import create_app
 from app.models import DeletionRequest, ExportJob, Project, SourceVersion
-from app.services import run_deletion_worker_once, run_export_worker_once
+from app.services import render_content, run_deletion_worker_once, run_export_worker_once
 from fastapi.testclient import TestClient
 
 
@@ -157,3 +160,21 @@ def test_legal_hold_blocks_deletion_without_removing_project(tmp_path: Path):
         assert result["blocked"] == 1
         assert db.get(DeletionRequest, deletion["id"]).status == "blocked"
         assert db.query(Project).filter_by(id=project["id"], workspace_id="local-workspace").first() is not None
+
+
+def test_exports_escape_untrusted_markup_in_html_and_docx(tmp_path: Path):
+    blocks = [
+        SimpleNamespace(
+            block_type="paragraph",
+            payload={"text": "<script>alert('xss')</script> & unsafe"},
+        )
+    ]
+    html = render_content("<img src=x onerror=alert(1)>", blocks, "html").decode()
+    assert "<script>" not in html
+    assert "&lt;script&gt;" in html
+    assert "&lt;img" in html
+    docx = render_content("<title>", blocks, "docx")
+    with ZipFile(BytesIO(docx)) as archive:
+        document_xml = archive.read("word/document.xml")
+    assert b"<script>" not in document_xml
+    assert b"&lt;script&gt;" in document_xml

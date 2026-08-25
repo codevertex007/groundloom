@@ -18,19 +18,29 @@ SENSITIVE_KEYS = {
     "api_key",
     "password",
     "secret",
+    "authorization",
+    "access_token",
+    "refresh_token",
+    "private_key",
+    "cookie",
 }
 
 
+def _redact_value(value: Any) -> Any:
+    if isinstance(value, dict):
+        return {
+            key: "[REDACTED]" if key.lower() in SENSITIVE_KEYS else _redact_value(item)
+            for key, item in value.items()
+        }
+    if isinstance(value, list):
+        return [_redact_value(item) for item in value]
+    if isinstance(value, tuple):
+        return tuple(_redact_value(item) for item in value)
+    return value
+
+
 def redact(attributes: dict[str, Any]) -> dict[str, Any]:
-    safe: dict[str, Any] = {}
-    for key, value in attributes.items():
-        if key.lower() in SENSITIVE_KEYS:
-            safe[key] = "[REDACTED]"
-        elif isinstance(value, dict):
-            safe[key] = redact(value)
-        else:
-            safe[key] = value
-    return safe
+    return _redact_value(attributes)
 
 
 @dataclass

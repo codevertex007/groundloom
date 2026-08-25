@@ -5,8 +5,8 @@ sign-off. It was refreshed on 2026-08-25 from the repository root.
 
 | Gate | Command/evidence | Result |
 |---|---|---|
-| Backend unit/contract/security | `python -m pytest backend/tests -q -rA` | 71 passed; two optional-provider tests and four opt-in deployment-integration tests skip in the default local environment; the provider probe passes both optional tests and the disposable Docker run passes all four deployment tests |
-| Python lint | `python -m ruff check backend/app backend/tests backend/scripts` | Passed |
+| Backend unit/contract/security | `python -m pytest backend/tests -q -rA` | 72 passed; two optional-provider tests and four opt-in deployment-integration tests skip in the default local environment; the provider probe passes both optional tests and the disposable Docker run passes all four deployment tests |
+| Python lint | `python -m ruff check backend/app backend/tests backend/scripts` | Passed; export rendering escapes untrusted markup and telemetry redaction covers nested structures |
 | Python types | `python -m mypy backend/app backend/scripts` | Passed; 36 source files |
 | Documentation/traceability | `python backend/scripts/validate_docs.py` | Passed; refreshed through migration 015, serialized active-turn, worker health, budget, provider outage, role-bound tenant-RLS, worker-role, migrator-role, project-key, pgvector, reranker, semantic-evaluator, signed-download, and shared-artifact-retention contracts |
 | Frontend build | `cd frontend; npm run build` | Passed |

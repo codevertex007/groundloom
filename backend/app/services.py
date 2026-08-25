@@ -7,7 +7,7 @@ import shutil
 import time
 import zipfile
 from datetime import UTC, datetime, timedelta
-from html import unescape
+from html import escape
 from pathlib import Path
 from typing import Any
 from xml.etree import ElementTree
@@ -3786,11 +3786,16 @@ def render_content(title: str, blocks: list[ContentBlock], format: str) -> bytes
         return markdown.encode()
     if format == "html":
         body = "".join(
-            f"<h1>{unescape(line)}</h1>" if i == 0 else f"<p>{unescape(line)}</p>"
+            f"<h1>{escape(line, quote=False)}</h1>"
+            if i == 0
+            else f"<p>{escape(line, quote=False)}</p>"
             for i, line in enumerate(lines)
             if line
         )
-        return f"<!doctype html><html><head><meta charset='utf-8'><title>{unescape(title)}</title></head><body>{body}</body></html>".encode()
+        return (
+            "<!doctype html><html><head><meta charset='utf-8'><title>"
+            f"{escape(title, quote=False)}</title></head><body>{body}</body></html>"
+        ).encode()
     if format == "docx":
         return minimal_docx(lines)
     return minimal_pdf(lines)
@@ -3800,7 +3805,8 @@ def minimal_docx(lines: list[str]) -> bytes:
     import io
 
     document = "".join(
-        f"<w:p><w:r><w:t xml:space='preserve'>{unescape(line)}</w:t></w:r></w:p>" for line in lines
+        f"<w:p><w:r><w:t xml:space='preserve'>{escape(line, quote=False)}</w:t></w:r></w:p>"
+        for line in lines
     )
     files = {
         "[Content_Types].xml": "<?xml version='1.0'?><Types xmlns='http://schemas.openxmlformats.org/package/2006/content-types'><Default Extension='rels' ContentType='application/vnd.openxmlformats-package.relationships+xml'/><Default Extension='xml' ContentType='application/xml'/><Override PartName='/word/document.xml' ContentType='application/vnd.openxmlformats-officedocument.wordprocessingml.document.main+xml'/></Types>",

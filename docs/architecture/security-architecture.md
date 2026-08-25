@@ -16,6 +16,9 @@ Cross-tenant access, malicious uploads, prompt injection, tool abuse, data exfil
 - No unrestricted production shell/network. Any code sandbox gets resource/network/filesystem limits and short-lived credentials.
 - Organization policy and published skills are immutable/read-only to runtime agents.
 - Redact telemetry and use a secret manager.
+- Recursively redact sensitive keys inside nested objects and lists before
+  local or external telemetry emission; export HTML/DOCX renderers escape
+  untrusted content and never interpret source/model markup.
 - Audit security-sensitive reads/writes, approvals, membership/policy changes, and exports.
 
 Security tests in `validation/security-test-plan.md` block release.

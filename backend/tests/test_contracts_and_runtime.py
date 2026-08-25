@@ -129,10 +129,18 @@ def test_checkpoint_scope_and_redacted_telemetry(tmp_path):
     telemetry = build_telemetry("local")
     assert isinstance(telemetry, LocalTelemetry)
     telemetry.emit(
-        "test", {"content": "private", "nested": {"password": "secret"}, "status": "ok"}
+        "test",
+        {
+            "content": "private",
+            "nested": {"password": "secret"},
+            "items": [{"source_text": "private list item", "authorization": "Bearer secret"}],
+            "status": "ok",
+        },
     )
     assert telemetry.records[0]["attributes"]["content"] == "[REDACTED]"
     assert telemetry.records[0]["attributes"]["nested"]["password"] == "[REDACTED]"
+    assert telemetry.records[0]["attributes"]["items"][0]["source_text"] == "[REDACTED]"
+    assert telemetry.records[0]["attributes"]["items"][0]["authorization"] == "[REDACTED]"
 
 
 def test_local_agent_writes_bounded_run_checkpoint(tmp_path):

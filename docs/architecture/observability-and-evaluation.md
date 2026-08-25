@@ -26,5 +26,7 @@ semantic grader through the same narrow interface and must publish its rubric,
 evaluator version, dataset hash, and regression report. Langfuse integration is
 lazy-loaded through the telemetry adapter and remains optional locally.
 Evaluation reports are emitted through `record_evaluation`; the local adapter
-stores a bounded redacted event and Langfuse receives the same observation via
-its adapter. No evaluator can mutate a skill, memory item, or canonical content.
+stores a bounded recursively redacted event and Langfuse receives the same
+observation via its adapter. Nested lists/maps are treated as untrusted
+telemetry payloads, and no evaluator can mutate a skill, memory item, or
+canonical content.
