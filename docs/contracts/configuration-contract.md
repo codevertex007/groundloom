@@ -23,6 +23,10 @@ outages and malformed dimensions become typed redacted dependency errors.
 pgvector derived index for PostgreSQL. Production rejects an explicit local
 index. Migration `015_pgvector_source_embeddings` owns the deployment table;
 the migration role must be able to use an installed pgvector extension.
+Reranking defaults to deterministic local overlap/phrase scoring. The optional
+`cohere-compatible` reranker uses a bounded `/rerank` adapter with an explicit
+model, API key, endpoint, and timeout; missing keys, outages, and malformed
+scores are typed failures and never silently fall back to a different provider.
 S3-compatible storage calls use `object_store_max_attempts` (default 3) with
 `object_store_connect_timeout_seconds` (default 5) and
 `object_store_read_timeout_seconds` (default 30). Storage SDK failures are

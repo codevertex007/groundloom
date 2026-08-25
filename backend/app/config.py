@@ -48,6 +48,11 @@ class Settings(BaseSettings):
     embedding_base_url: str | None = None
     embedding_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
     retrieval_index_backend: Literal["auto", "local", "pgvector"] = "auto"
+    reranker_provider: str = "local"
+    reranker_model: str = "deterministic-overlap-v1"
+    reranker_api_key: str | None = None
+    reranker_base_url: str | None = None
+    reranker_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
     telemetry_provider: str = "local"
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
@@ -160,6 +165,8 @@ class Settings(BaseSettings):
             "embedding_model": self.embedding_model,
             "embedding_dimensions": self.embedding_dimensions,
             "retrieval_index_backend": self.retrieval_index_backend,
+            "reranker_provider": self.reranker_provider,
+            "reranker_model": self.reranker_model,
             "telemetry_provider": self.telemetry_provider,
             "agent_inline_local": self.agent_inline_local,
             "agent_max_attempts": self.agent_max_attempts,

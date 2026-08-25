@@ -57,7 +57,7 @@ def test_project_source_grounded_run_and_replay(tmp_path):
         headers=headers(),
     )
     assert evidence.status_code == 200
-    assert evidence.json()["retrieval_version"] == "hybrid.v1"
+    assert evidence.json()["retrieval_version"] == "hybrid.v2"
     assert evidence.json()["passages"]
     detail = api.get(f"/v1/projects/{project_id}", headers=headers())
     assert detail.status_code == 200
@@ -457,3 +457,45 @@ def test_skill_publish_validation_and_export(tmp_path):
     assert export.status_code == 202 and export.json()["status"] == "completed"
     download = api.get(f"/v1/exports/{export.json()['id']}/download", headers=headers())
     assert download.status_code == 200 and download.content.startswith(b"%PDF")
+
+
+def test_retrieval_reranks_expands_neighbors_and_deduplicates_blocks(tmp_path):
+    api = client(tmp_path)
+    raw = base64.b64encode(
+        b"Context before the maintenance section.\n\n"
+        b"The torque service fastener uses 10 Nm.\n\n"
+        b"Context after the maintenance section.\n\n"
+        b"The torque service fastener uses 10 Nm."
+    ).decode()
+    source = api.post(
+        "/v1/sources/uploads",
+        headers=headers(),
+        json={
+            "name": "Rerank guide",
+            "filename": "rerank.txt",
+            "content_base64": raw,
+            "mime_type": "text/plain",
+        },
+    ).json()
+    project = api.post(
+        "/v1/projects",
+        headers=headers(),
+        json={
+            "name": "Rerank project",
+            "project_type": "brief",
+            "brief": "Find torque guidance",
+            "source_version_ids": [source["current_version_id"]],
+        },
+    ).json()
+    evidence = api.get(
+        f"/v1/projects/{project['id']}/sources/search",
+        headers=headers(),
+        params={"q": "torque service fastener", "limit": 4},
+    )
+    assert evidence.status_code == 200, evidence.text
+    body = evidence.json()
+    assert body["retrieval_version"] == "hybrid.v2"
+    texts = [passage["text"] for passage in body["passages"]]
+    assert len(texts) == len(set(texts))
+    assert any("torque service fastener" in text.lower() for text in texts)
+    assert any("context" in text.lower() for text in texts)

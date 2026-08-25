@@ -60,6 +60,7 @@ from .models import (
     utcnow,
 )
 from .object_store import build_object_store
+from .reranking import build_reranker, combine_rerank_scores
 from .retrieval import build_embedding_provider, cosine_similarity, hybrid_score
 from .schemas import (
     DecisionIn,
@@ -718,7 +719,26 @@ def start_run(
                 if settings
                 else "local.deterministic.v1"
             ),
-            "retrieval_version": "lexical.v1",
+            "retrieval_version": (
+                "hybrid.pgvector.v2"
+                if settings
+                and (
+                    settings.retrieval_index_backend == "pgvector"
+                    or (
+                        settings.retrieval_index_backend == "auto"
+                        and settings.database_url.startswith("postgres")
+                    )
+                )
+                else "hybrid.v2"
+            ),
+            "retrieval_config": {
+                "index_backend": settings.retrieval_index_backend if settings else "local",
+                "embedding_provider": settings.embedding_provider if settings else "local",
+                "embedding_model": settings.embedding_model if settings else "deterministic-hash-v1",
+                "embedding_dimensions": settings.embedding_dimensions if settings else 32,
+                "reranker_provider": settings.reranker_provider if settings else "local",
+                "reranker_model": settings.reranker_model if settings else "deterministic-overlap-v1",
+            },
             "evaluator_version": "deterministic.v1",
             "actor_id": ctx.user_id,
             "correlation_id": ctx.correlation_id,
@@ -976,13 +996,14 @@ def search_evidence(
     limit: int = 8,
     settings: Settings | None = None,
 ) -> EvidenceBundle:
+    limit = max(1, min(limit, 100))
     project = _project(db, ctx, project_id)
     config = db.get(ProjectConfigVersion, project.current_config_version_id)
     allowed = set(config.source_version_ids if config else [])
     if not allowed:
         return EvidenceBundle(
             query=query,
-            retrieval_version="hybrid.v1",
+            retrieval_version="hybrid.v2",
             passages=[],
             gaps=["No selected source versions are available."],
         )
@@ -1026,9 +1047,56 @@ def search_evidence(
         score = hybrid_score(lexical_score, semantic_score)
         if score > 0 and (lexical_score > 0 or raw_semantic_score >= 0.25):
             ranked.append((score, block, source))
-    ranked.sort(key=lambda item: (-item[0], item[1].block_no))
+    ranked.sort(key=lambda item: (-item[0], item[1].source_version_id, item[1].block_no, item[1].id))
+    candidate_limit = max(16, min(100, limit * 8))
+    rerank_candidates = ranked[:candidate_limit]
+    if rerank_candidates:
+        rerank_scores = build_reranker(settings).score(
+            query, [block.text[:5000] for _, block, _ in rerank_candidates]
+        )
+        ranked = [
+            (
+                combine_rerank_scores(base_score, rerank_scores[index]),
+                block,
+                source,
+            )
+            for index, (base_score, block, source) in enumerate(rerank_candidates)
+        ]
+        block_lookup = {block.id: (block, source) for block, source in blocks}
+        by_version: dict[str, list[tuple[SourceBlock, Source]]] = {}
+        for block, source in blocks:
+            by_version.setdefault(block.source_version_id, []).append((block, source))
+        for version_blocks in by_version.values():
+            version_blocks.sort(key=lambda item: (item[0].block_no, item[0].id))
+        ranked_ids = {block.id for _, block, _ in ranked}
+        for base_score, block, _source in ranked[: min(limit, 8)]:
+            if base_score < 0.35:
+                continue
+            version_blocks = by_version.get(block.source_version_id, [])
+            position = next(
+                (index for index, (candidate, _) in enumerate(version_blocks) if candidate.id == block.id),
+                None,
+            )
+            if position is None:
+                continue
+            for neighbor_position in (position - 1, position + 1):
+                if 0 <= neighbor_position < len(version_blocks):
+                    neighbor, neighbor_source = version_blocks[neighbor_position]
+                    if neighbor.id not in ranked_ids and neighbor.id in block_lookup:
+                        ranked.append((base_score * 0.55, neighbor, neighbor_source))
+                        ranked_ids.add(neighbor.id)
+    ranked.sort(key=lambda item: (-item[0], item[1].source_version_id, item[1].block_no, item[1].id))
+    deduped: list[tuple[float, SourceBlock, Source]] = []
+    seen_text: set[tuple[str, str]] = set()
+    for candidate in ranked:
+        normalized = re.sub(r"\s+", " ", candidate[1].text).strip().lower()
+        key = (candidate[1].source_version_id, normalized)
+        if key in seen_text:
+            continue
+        seen_text.add(key)
+        deduped.append(candidate)
     passages: list[PassageOut] = []
-    for score, block, source in ranked[:limit]:
+    for score, block, source in deduped[:limit]:
         passages.append(
             PassageOut(
                 passage_id=f"passage_{block.id}",
@@ -1046,7 +1114,7 @@ def search_evidence(
     return EvidenceBundle(
         query=query,
         retrieval_version=(
-            "hybrid.pgvector.v1" if vector_store.backend_id == "pgvector" else "hybrid.v1"
+            "hybrid.pgvector.v2" if vector_store.backend_id == "pgvector" else "hybrid.v2"
         ),
         passages=passages,
         gaps=[] if passages else ["No selected passage matched the request."],
