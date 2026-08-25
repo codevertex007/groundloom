@@ -4,6 +4,11 @@ Configuration groups: application/environment, database/checkpointer, object sto
 
 Every setting has type, default where safe, required environments, secret classification, validation, and reload policy. Production refuses startup on missing secrets, invalid public URLs, unsafe CORS, disabled auth, absent encryption configuration, or in-memory checkpoint/storage configuration.
 
+AI prompt assets are packaged UTF-8 text files under `backend/app/ai/prompts/`
+and loaded only through the allowlisted prompt loader. The runtime records the
+pinned `groundloom.prompt.v1` contract; an installed package must include the
+same assets as the source tree.
+
 Feature flags do not bypass authorization/invariants and have owner, purpose, default, creation/removal date, metrics, and rollback behavior. Log a redacted effective configuration fingerprint, not secret values.
 
 The local defaults are explicit: SQLite domain state, a filesystem object store,

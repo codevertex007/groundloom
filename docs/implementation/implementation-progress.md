@@ -23,6 +23,8 @@ Non-goals remain general web crawling, real-time CRDT collaboration, arbitrary s
 | 08 Security, reliability, and operations | completed-local | Signed runtime identity, parser/path safety, tenant/tool-scope tests, bounded retries, leased-worker replay, checksum-backed local backup/restore, synthetic retrieval benchmark, redaction, alerts, role-bound RLS policy generation, dedicated worker/migrator runtime roles, and CI checks exist; disposable live Postgres/RLS/checkpoint/S3 integration passed. Production restore/load, sandbox, and incident exercises remain explicit deployment evidence. |
 | 09 Production readiness | blocked-external-evidence | Local release is runnable and validated. Production sign-off still requires installed/pinned Deep Agents, Postgres/pgvector, object storage, identity, telemetry, backup/restore, load, and rollback evidence. |
 
+| 2026-08-25 | AI contribution boundary | Moved agent runtime, retrieval/reranking providers, semantic evaluation, and prompt loading into `backend/app/ai/`; externalized system prompts into packaged `.txt` assets; retained compatibility facades; added `frontend/src/ai/AgentEventLabel.jsx`; added prompt/boundary tests, ADR-032, ownership documentation, configuration contract, and traceability updates. |
+
 ## Initial requirement-to-slice map
 
 | Slice | Requirements | Planned proof |

@@ -1,0 +1,1 @@
+Return JSON only with score (0..1), verdict (pass or needs_revision), and feedback (array of short strings).

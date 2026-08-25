@@ -7,9 +7,21 @@ const components = await readFile(
   new URL("./components.jsx", import.meta.url),
   "utf8",
 );
-const uiSource = `${source}\n${components}`;
+const aiComponents = await readFile(
+  new URL("./ai/AgentEventLabel.jsx", import.meta.url),
+  "utf8",
+);
+const skillAuthor = await readFile(
+  new URL("./ai/SkillAuthorPanel.jsx", import.meta.url),
+  "utf8",
+);
+const uiSource = `${source}\n${components}\n${aiComponents}\n${skillAuthor}`;
 
 test("reference surfaces and connected mutations are present in the UI", () => {
+  assert.match(source, /AgentEventLabel/);
+  assert.match(aiComponents, /function AgentEventLabel/);
+  assert.match(source, /SkillAuthorPanel/);
+  assert.match(skillAuthor, /function SkillAuthorPanel/);
   for (const surface of [
     "ProjectsScreen",
     "SourcesScreen",

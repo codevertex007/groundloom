@@ -152,6 +152,13 @@ These can be separate processes from one repository. Do not begin with a fleet o
 
 ## 5. Harness boundary and deterministic substrate
 
+Implementation ownership is split explicitly: AI runtime/provider/evaluation
+code and prompt assets live under `backend/app/ai/`, focused agent UI lives
+under `frontend/src/ai/`, and deterministic product services remain responsible
+for authorization, persistence, workers, and canonical commands. See the
+[AI contribution boundary](ai-contribution-boundary.md) and ADR-032 for the
+prompt asset and compatibility-facade contract.
+
 Groundloom should expose one primary project-agent runtime plus a small registry of supporting agents and deterministic jobs.
 
 | Runtime / job | Framework | Purpose | Invocation pattern |

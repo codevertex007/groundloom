@@ -19,6 +19,12 @@ agent, storage, observability, and Postgres dependencies plus real services.
 
 A persistent central Deep Agent owns the adaptive semantic loop; typed tools, scoped skills, memory, middleware, validation hooks, and specialist subagents form its harness; deterministic services own authorization, canonical persistence, ingestion, rendering, approvals, and external side effects.
 
+AI contribution boundaries are documented in
+[`docs/architecture/ai-contribution-boundary.md`](docs/architecture/ai-contribution-boundary.md):
+AI implementation lives under `backend/app/ai/` and `frontend/src/ai/`, and
+system prompts are reviewed `.txt` assets rather than inline orchestration
+strings.
+
 ## Repository state
 
 The backend, frontend, migrations, worker seams, agent harness, retrieval,
