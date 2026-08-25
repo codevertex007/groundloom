@@ -36,3 +36,12 @@ proposal-only patch tools. Its built-in delegation path is limited to named
 `source-researcher`, `citation-auditor`, and `module-writer` specialists; shell,
 filesystem, SQL, network, credential, and arbitrary object-storage tools are
 excluded by the provider harness profile.
+
+When a configured provider is running, the runtime consumes the verified
+LangGraph `stream_mode=["messages", "updates"]` interface rather than waiting
+for a final `invoke()` result. It projects bounded `agent.progress`,
+`tool.started/completed`, and `subagent.started/completed` metadata into the
+same transactional public-event/outbox path. Model text, tool arguments,
+source passages, and hidden reasoning are never copied into those progress
+events. The worker checks the durable cancellation flag between stream chunks
+and passes the project run budget as a bounded LangGraph recursion limit.

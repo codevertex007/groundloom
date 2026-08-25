@@ -6,11 +6,163 @@ installed Deep Agents provider through the same factory without changing the
 product contracts or giving the model infrastructure authority.
 """
 
+from collections.abc import Callable, Iterable
 from dataclasses import dataclass
 from typing import Any
 
 from .checkpoints import build_checkpoint_provider
 from .config import Settings
+
+ProgressCallback = Callable[[str, dict[str, Any]], None]
+CancelCheck = Callable[[], bool]
+
+
+def _message_value(message: Any, key: str, default: Any = None) -> Any:
+    if isinstance(message, dict):
+        return message.get(key, default)
+    return getattr(message, key, default)
+
+
+def _message_id(message: Any) -> str | None:
+    value = _message_value(message, "id")
+    return str(value) if value else None
+
+
+def _message_type(message: Any) -> str:
+    value = _message_value(message, "type")
+    if value:
+        return str(value)
+    class_name = type(message).__name__.lower()
+    if "tool" in class_name:
+        return "tool"
+    if "human" in class_name:
+        return "human"
+    if "ai" in class_name:
+        return "ai"
+    return "message"
+
+
+def _tool_calls(message: Any) -> list[Any]:
+    calls = _message_value(message, "tool_calls", [])
+    return list(calls) if isinstance(calls, (list, tuple)) else []
+
+
+def _tool_name(value: Any) -> str:
+    if isinstance(value, dict):
+        name = value.get("name") or value.get("tool_name")
+    else:
+        name = getattr(value, "name", None) or getattr(value, "tool_name", None)
+    return str(name)[:120] if name else "unknown"
+
+
+def _tool_call_id(value: Any) -> str | None:
+    if isinstance(value, dict):
+        call_id = value.get("id") or value.get("tool_call_id")
+    else:
+        call_id = getattr(value, "id", None) or getattr(value, "tool_call_id", None)
+    return str(call_id)[:160] if call_id else None
+
+
+def _stream_mode_and_chunk(item: Any) -> tuple[str, Any]:
+    """Normalize LangGraph single- and multi-mode stream output."""
+    if isinstance(item, tuple) and len(item) == 2 and isinstance(item[0], str):
+        return item[0], item[1]
+    return "updates", item
+
+
+def consume_provider_stream(
+    stream: Iterable[Any],
+    *,
+    progress_callback: ProgressCallback | None = None,
+    cancel_check: CancelCheck | None = None,
+) -> dict[str, Any]:
+    """Collect a Deep Agents stream while projecting only safe progress metadata.
+
+    Deep Agents/LangGraph emits ``(mode, chunk)`` pairs for multi-mode streams.
+    The product stream must never contain model text, tool arguments, source
+    passages, or hidden reasoning, so this adapter emits names, node phases,
+    and bounded call IDs only. Message state is reconstructed by ID so both
+    delta and snapshot-shaped update chunks are accepted.
+    """
+    state: dict[str, Any] = {}
+    messages: list[Any] = []
+    message_positions: dict[str, int] = {}
+    emitted_nodes: set[str] = set()
+    emitted_tool_starts: set[str] = set()
+    emitted_tool_completions: set[str] = set()
+    cancelled = False
+
+    def remember_messages(values: Any) -> list[Any]:
+        if not isinstance(values, (list, tuple)):
+            return []
+        normalized = list(values)
+        for message in normalized:
+            message_id = _message_id(message)
+            if message_id is not None and message_id in message_positions:
+                messages[message_positions[message_id]] = message
+            else:
+                if message_id is not None:
+                    message_positions[message_id] = len(messages)
+                messages.append(message)
+        return normalized
+
+    def emit(event_type: str, payload: dict[str, Any]) -> None:
+        if progress_callback is not None:
+            progress_callback(event_type, payload)
+
+    for item in stream:
+        if cancel_check is not None and cancel_check():
+            cancelled = True
+            break
+        mode, chunk = _stream_mode_and_chunk(item)
+        if mode == "messages":
+            message = chunk[0] if isinstance(chunk, tuple) and chunk else chunk
+            metadata = chunk[1] if isinstance(chunk, tuple) and len(chunk) > 1 else {}
+            remember_messages([message])
+            if isinstance(metadata, dict):
+                node = str(metadata.get("langgraph_node") or metadata.get("node") or "model")[:120]
+            else:
+                node = "model"
+            if node not in emitted_nodes:
+                emit("agent.progress", {"stage": "model", "node": node})
+                emitted_nodes.add(node)
+            continue
+
+        if not isinstance(chunk, dict):
+            continue
+        for node_name, update in chunk.items():
+            node = str(node_name)[:120]
+            if node not in emitted_nodes:
+                emit("agent.progress", {"stage": "node", "node": node})
+                emitted_nodes.add(node)
+            if not isinstance(update, dict):
+                continue
+            state.update({key: value for key, value in update.items() if key != "messages"})
+            update_messages = remember_messages(update.get("messages"))
+            for message in update_messages:
+                tool_calls = _tool_calls(message)
+                for call in tool_calls:
+                    call_id = _tool_call_id(call) or f"{node}:{_tool_name(call)}"
+                    if call_id in emitted_tool_starts:
+                        continue
+                    emitted_tool_starts.add(call_id)
+                    name = _tool_name(call)
+                    emit("tool.started", {"tool_name": name, "call_id": call_id, "node": node})
+                    if name == "task":
+                        emit("subagent.started", {"tool_name": name, "call_id": call_id, "node": node})
+                if _message_type(message) == "tool":
+                    call_id = _tool_call_id(message) or f"{node}:tool"
+                    if call_id not in emitted_tool_completions:
+                        emitted_tool_completions.add(call_id)
+                        name = _tool_name(message)
+                        emit("tool.completed", {"tool_name": name, "call_id": call_id, "node": node})
+                        if name == "task":
+                            emit("subagent.completed", {"tool_name": name, "call_id": call_id, "node": node})
+
+    state["messages"] = messages
+    if cancelled:
+        state["cancelled"] = True
+    return state
 
 
 @dataclass(frozen=True)
@@ -37,7 +189,16 @@ class AgentRuntime:
         }
 
     def invoke(
-        self, db: Any, ctx: Any, project_id: str, thread_key: str, request_text: str
+        self,
+        db: Any,
+        ctx: Any,
+        project_id: str,
+        thread_key: str,
+        request_text: str,
+        *,
+        progress_callback: ProgressCallback | None = None,
+        cancel_check: CancelCheck | None = None,
+        max_tool_calls: int = 40,
     ) -> dict[str, Any]:
         raise RuntimeError(f"The {self.__class__.__name__} runtime does not support provider invocation")
 
@@ -71,7 +232,18 @@ class DeepAgentsAgentRuntime(AgentRuntime):
             ),
         )
 
-    def invoke(self, db: Any, ctx: Any, project_id: str, thread_key: str, request_text: str) -> dict[str, Any]:
+    def invoke(
+        self,
+        db: Any,
+        ctx: Any,
+        project_id: str,
+        thread_key: str,
+        request_text: str,
+        *,
+        progress_callback: ProgressCallback | None = None,
+        cancel_check: CancelCheck | None = None,
+        max_tool_calls: int = 40,
+    ) -> dict[str, Any]:
         from .schemas import PatchCreate, PatchOperation
         from .services import (
             content_blocks,
@@ -242,10 +414,28 @@ class DeepAgentsAgentRuntime(AgentRuntime):
                 name="groundloom-project-agent",
                 subagents=subagents,
             )
-            result = graph.invoke(
-                {"messages": [{"role": "user", "content": request_text}]},
-                config={"configurable": {"thread_id": thread_key}},
-            )
+            config = {
+                "configurable": {"thread_id": thread_key},
+                # LangGraph counts model and tool transitions; keep the graph
+                # bounded by the application budget without trusting model
+                # output to choose its own execution limit.
+                "recursion_limit": max(8, min(200, max_tool_calls * 2 + 4)),
+            }
+            if progress_callback is None and cancel_check is None:
+                result = graph.invoke(
+                    {"messages": [{"role": "user", "content": request_text}]},
+                    config=config,
+                )
+            else:
+                result = consume_provider_stream(
+                    graph.stream(
+                        {"messages": [{"role": "user", "content": request_text}]},
+                        config=config,
+                        stream_mode=["messages", "updates"],
+                    ),
+                    progress_callback=progress_callback,
+                    cancel_check=cancel_check,
+                )
         return result
 
 

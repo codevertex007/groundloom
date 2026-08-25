@@ -1212,6 +1212,18 @@ def execute_deep_agent_turn(
         raise GroundloomError("DEPENDENCY_UNAVAILABLE", "The project thread is unavailable.", 503)
     result: dict[str, Any] | None = None
     provider_error: Exception | None = None
+
+    def provider_progress(event_type: str, payload: dict[str, Any]) -> None:
+        """Persist provider stream metadata before it is exposed over SSE."""
+        append_event(db, ctx, run, event_type, payload)
+        db.commit()
+
+    def provider_cancel_requested() -> bool:
+        # Read the flag through a scalar query so a worker can observe a
+        # cancellation committed by the API while the provider is streaming.
+        value = db.query(AgentRun.cancel_requested).filter(AgentRun.id == run.id).scalar()
+        return bool(value)
+
     attempts = max(1, min(settings.agent_max_attempts, 5))
     for attempt in range(attempts):
         if run.cancel_requested:
@@ -1222,7 +1234,16 @@ def execute_deep_agent_turn(
             return
         try:
             runtime = build_agent_runtime(settings.model_provider, settings)
-            result = runtime.invoke(db, ctx, run.project_id, thread.thread_key, run.request_text)
+            result = runtime.invoke(
+                db,
+                ctx,
+                run.project_id,
+                thread.thread_key,
+                run.request_text,
+                progress_callback=provider_progress,
+                cancel_check=provider_cancel_requested,
+                max_tool_calls=int((run.budget_json or {}).get("max_tool_calls", 40)),
+            )
             provider_error = None
             break
         except Exception as exc:
@@ -1249,6 +1270,13 @@ def execute_deep_agent_turn(
             503,
             retryable=True,
         ) from failure
+    if result.get("cancelled") or provider_cancel_requested():
+        run.status = "cancelled"
+        append_event(db, ctx, run, "run.cancelled", {"status": "cancelled"})
+        audit(db, ctx, "run.cancelled", "agent_run", run.id, "Cancelled Deep Agents project turn")
+        db.commit()
+        checkpoint_local_run(settings, ctx, run, "cancelled")
+        return
     messages = result.get("messages", []) if isinstance(result, dict) else []
     last = messages[-1] if messages else {}
     content = last.get("content", "") if isinstance(last, dict) else getattr(last, "content", "")

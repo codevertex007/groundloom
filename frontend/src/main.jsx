@@ -1138,7 +1138,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
   };
   const lastActivity = [...events]
     .reverse()
-    .find((e) => e.type === "run.completed" || e.type === "artifact.delta");
+    .find((e) => e.type === "run.completed" || e.type === "artifact.delta") || events.at(-1);
   const cancellable = [
     "queued",
     "running",
@@ -1385,6 +1385,9 @@ function Canvas({ project, sources, onBack, onRefresh }) {
                 <span className="event-kind">{event.type.split(".")[0]}</span>
                 <span>
                   {event.payload?.summary ||
+                    (event.payload?.tool_name &&
+                      `${event.payload.tool_name}${event.payload.node ? ` · ${event.payload.node}` : ""}`) ||
+                    (event.payload?.node && `Agent node · ${event.payload.node}`) ||
                     event.payload?.name ||
                     event.payload?.text ||
                     event.type}
