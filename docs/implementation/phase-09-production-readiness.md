@@ -3,7 +3,7 @@
 ## Checklist
 
 - [ ] `IMPL-09-001` Close/accept all release-blocking requirements, risks, and open decisions; the external release-evidence register is complete, but live acceptance remains required.
-- [ ] `IMPL-09-002` Complete bidirectional requirements-test-code evidence matrix.
+- [x] `IMPL-09-002` Complete the local bidirectional requirements-test-code evidence matrix; grouped-ID coverage is validated by `backend/scripts/validate_docs.py`, while external release-owner acceptance remains required.
 - [ ] `IMPL-09-003` Run full CI, eval, security, accessibility, load, migration, backup/restore gates on release candidate.
 - [ ] `IMPL-09-004` Validate production configuration/secrets/domains/storage/identity/telemetry/retention.
 - [ ] `IMPL-09-005` Stage deployment, smoke, soak, rollback rehearsal, provider-degradation exercise.

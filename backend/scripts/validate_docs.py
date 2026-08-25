@@ -5,6 +5,27 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[2]
 DOCS = ROOT / "docs"
+REQUIREMENT_SOURCES = (
+    DOCS / "product" / "product-requirements.md",
+    DOCS / "product" / "non-functional-requirements.md",
+    DOCS / "product" / "roles-and-permissions.md",
+    DOCS / "product" / "ui-screen-inventory.md",
+)
+
+
+def _matrix_covers(matrix: str, requirement_id: str) -> bool:
+    if requirement_id in matrix:
+        return True
+    prefix, number = requirement_id.rsplit("-", 1)
+    try:
+        numeric_id = int(number)
+    except ValueError:
+        return False
+    ranges = re.findall(
+        rf"{re.escape(prefix)}-(\d+)\.\.(\d+)",
+        matrix,
+    )
+    return any(int(start) <= numeric_id <= int(end) for start, end in ranges)
 
 
 def main() -> int:
@@ -15,8 +36,15 @@ def main() -> int:
     if duplicates:
         raise SystemExit(f"Duplicate documentation identifiers: {duplicates}")
     matrix = (DOCS / "validation" / "requirements-test-matrix.md").read_text(encoding="utf-8")
-    required = ["FR-PROJECT-001", "FR-SOURCE-001", "FR-SKILL-001", "FR-AGENT-001", "FR-CONTENT-001", "FR-QUALITY-001", "FR-EXPORT-001"]
-    missing = [item for item in required if item not in matrix]
+    required: set[str] = set()
+    for source in REQUIREMENT_SOURCES:
+        required.update(
+            re.findall(
+                r"\*\*((?:FR|NFR|SEC|UI)-[A-Z0-9-]+)\*\*",
+                source.read_text(encoding="utf-8"),
+            )
+        )
+    missing = sorted(item for item in required if not _matrix_covers(matrix, item))
     if missing:
         raise SystemExit(f"Traceability matrix is missing: {missing}")
     for path in markdown:

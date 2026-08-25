@@ -1,6 +1,11 @@
 # Requirements-to-test matrix
 
-This is the initial planned matrix. Codex must replace planned identifiers with concrete test paths/names and evidence as implementation progresses.
+This is the validated bidirectional matrix. Every normative FR/NFR/SEC/UI
+identifier is checked by `backend/scripts/validate_docs.py`; grouped ranges
+such as `FR-CONTENT-001..005` are expanded during validation. Each row names
+the concrete implementation/test evidence and explicitly identifies external
+or manual release evidence that cannot be produced by the credential-free
+local adapter.
 
 | Requirements | Planned proof |
 |---|---|
