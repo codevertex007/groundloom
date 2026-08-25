@@ -499,3 +499,18 @@ def test_retrieval_reranks_expands_neighbors_and_deduplicates_blocks(tmp_path):
     assert len(texts) == len(set(texts))
     assert any("torque service fastener" in text.lower() for text in texts)
     assert any("context" in text.lower() for text in texts)
+
+
+def test_validation_returns_deterministic_and_semantic_results(tmp_path):
+    api = client(tmp_path)
+    project = api.post(
+        "/v1/projects",
+        headers=headers(),
+        json={"name": "Quality", "project_type": "brief", "brief": "Quality review"},
+    ).json()
+    response = api.post(f"/v1/projects/{project['id']}/validate", headers=headers())
+    assert response.status_code == 200, response.text
+    body = response.json()
+    assert body["summary"]["semantic"]["provider"] == "local-deterministic"
+    assert body["summary"]["semantic"]["verdict"] == "needs_revision"
+    assert any(finding["category"] == "semantic" for finding in body["findings"])

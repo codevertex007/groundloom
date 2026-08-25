@@ -24,7 +24,7 @@ This is the initial planned matrix. Codex must replace planned identifiers with 
 | `ARCH-STATE-001..004` | architecture/static tests plus recovery/proposal tests |
 | `TOOL-*` | per-tool schema/auth/replay/bounds/trace tests |
 | `API-*`, `EVT-*` | OpenAPI/SSE schema, compatibility, replay tests, and `test_project_source_grounded_run_and_replay` stream assertion |
-| `EVAL-*` | `backend/tests/test_evaluation.py::test_deterministic_rubric_requires_terms_and_citations`; `backend/scripts/run_evals.py` JSON baseline |
+| `EVAL-*` | `backend/tests/test_evaluation.py::test_deterministic_rubric_requires_terms_and_citations`, `::test_openai_compatible_semantic_grader_validates_structured_output`, `::test_semantic_grader_outage_and_missing_configuration_are_typed`; `backend/scripts/run_evals.py` JSON baseline; deterministic invariants remain authoritative over provider judgment |
 | `PERF-LOCAL-*` | `backend/scripts/benchmark_local.py --requests 20`; synthetic SQLite/filesystem retrieval p50/p95 report |
 | `SUBAGENT-*` | `backend/tests/test_delegation_recovery.py::test_partial_delegation_retry_is_bounded_and_reconciled`; retry/reconciliation REST contracts |
 | `SKILL-AUTHOR-*` | `backend/tests/test_delegation_recovery.py::test_skill_author_endpoint_creates_draft_only_and_provider_failure_is_explicit`, `::test_skill_repair_creates_immutable_version_then_validates_and_publishes`; `/v1/skills/ai-drafts`, `PUT /v1/skill-versions/{id}/repair`, validation and publication commands |

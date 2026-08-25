@@ -5,10 +5,10 @@ sign-off. It was refreshed on 2026-08-25 from the repository root.
 
 | Gate | Command/evidence | Result |
 |---|---|---|
-| Backend unit/contract/security | `python -m pytest backend/tests -q -rA` | 66 passed; two optional-provider tests and four opt-in deployment-integration tests skip in the default local environment; the provider probe passes both optional tests and the disposable Docker run passes all four deployment tests |
+| Backend unit/contract/security | `python -m pytest backend/tests -q -rA` | 69 passed; two optional-provider tests and four opt-in deployment-integration tests skip in the default local environment; the provider probe passes both optional tests and the disposable Docker run passes all four deployment tests |
 | Python lint | `python -m ruff check backend/app backend/tests backend/scripts` | Passed |
 | Python types | `python -m mypy backend/app backend/scripts` | Passed; 36 source files |
-| Documentation/traceability | `python backend/scripts/validate_docs.py` | Passed; refreshed through migration 015, serialized active-turn, worker health, budget, provider outage, role-bound tenant-RLS, worker-role, migrator-role, project-key, and pgvector contracts |
+| Documentation/traceability | `python backend/scripts/validate_docs.py` | Passed; refreshed through migration 015, serialized active-turn, worker health, budget, provider outage, role-bound tenant-RLS, worker-role, migrator-role, project-key, pgvector, reranker, and semantic-evaluator contracts |
 | Frontend build | `cd frontend; npm run build` | Passed |
 | Frontend API/UI contract tests | `cd frontend; npm test` and `npm run test:components` | 5 native tests plus 3 actual React component-rendering tests passed: typed retryable errors/correlation, SSE reconnect cursor/offline behavior, queued export polling, reference-surface/mutation presence, no-native-alert regression, interactive accessibility semantics, shared header/empty-state rendering, and command-palette route rendering |
 | Frontend E2E/accessibility | `cd frontend; npx playwright install chromium; npm run test:e2e` | 10 Playwright tests passed on the pinned Windows Chromium lane: stable projects/sources visual baselines, cursor-paginated project surface, project → collaborator → proposal → accept/reject with active skill selection, settings persistence, command-palette navigation, plan approval/resume, skill scope filtering/forking and AI draft → validate → publish, immutable repair workflow, dropped-stream reconnect, permission-denied rendering, source version history/revision upload, source upload/readiness, evidence selection, exact citation-panel navigation, and axe serious/critical accessibility scan; non-Windows CI runs the 9 semantic tests and skips only the pixel baseline test |
@@ -26,9 +26,9 @@ sign-off. It was refreshed on 2026-08-25 from the repository root.
 ## External release gates still open
 
 Live Deep Agents/model-provider invocation, Langfuse delivery, external
-identity, OCR, production ANN/reranker capacity and quality, production worker
-concurrency, encrypted backup/restore, container sandboxing, staging
-soak/rollback, and release-owner approval require
+identity, OCR, production ANN/reranker capacity and quality, semantic evaluator
+quality baselines, production worker concurrency, encrypted backup/restore,
+container sandboxing, staging soak/rollback, and release-owner approval require
 external services or credentials. The disposable Postgres/pgvector, Postgres
 checkpoint, and MinIO/S3-compatible paths were exercised locally; this is
 deployment-shaped integration evidence, not production capacity or release

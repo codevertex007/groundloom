@@ -911,9 +911,15 @@ def register_routes(app: FastAPI) -> FastAPI:
 
     @app.post("/v1/projects/{project_id}/validate", response_model=ValidationOut)
     def content_validate(
-        project_id: str, db: Session = Depends(get_db), ctx: RuntimeContext = Depends(get_ctx)
+        project_id: str,
+        request: Request,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
     ):
-        return validation_dto(db, validate_content(db, ctx, project_id))
+        return validation_dto(
+            db,
+            validate_content(db, ctx, project_id, settings=request.app.state.settings),
+        )
 
     @app.post("/v1/exports", response_model=ExportOut, status_code=202)
     def exports_create(

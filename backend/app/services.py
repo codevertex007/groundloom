@@ -21,6 +21,7 @@ from .config import Settings
 from .context import RuntimeContext
 from .db import set_tenant_context, set_worker_context
 from .errors import GroundloomError
+from .evaluation import RubricVersion, build_grader
 from .ids import new_id
 from .models import (
     AgentRun,
@@ -3077,7 +3078,11 @@ def accept_outline(db: Session, ctx: RuntimeContext, outline_id: str) -> Outline
 
 
 def validate_content(
-    db: Session, ctx: RuntimeContext, project_id: str, version_id: str | None = None
+    db: Session,
+    ctx: RuntimeContext,
+    project_id: str,
+    version_id: str | None = None,
+    settings: Settings | None = None,
 ) -> ValidationRun:
     ctx.require(
         "validate content",
@@ -3107,16 +3112,52 @@ def validate_content(
                     "message": "Paragraph has no citation; mark unsupported claims or add evidence.",
                 }
             )
+    draft_text = "\n\n".join(
+        str(block.payload.get("text", ""))
+        for block in blocks
+        if isinstance(block.payload, dict)
+    )[:20_000]
+    citations = [
+        str(citation.get("passage_id", citation) if isinstance(citation, dict) else citation)
+        for block in blocks
+        for citation in (block.citations or [])[:20]
+    ][:100]
+    grader = build_grader(settings)
+    rubric = RubricVersion("groundloom.semantic.v1", require_citations=True, minimum_score=0.75)
+    grade = grader.grade(draft_text, citations, rubric)
+    for feedback in grade.feedback:
+        findings.append(
+            {
+                "severity": "warning" if grade.verdict == "needs_revision" else "info",
+                "category": "semantic",
+                "block_id": None,
+                "message": feedback,
+            }
+        )
+    semantic_summary = {
+        "rubric_id": grade.rubric_id,
+        "score": grade.score,
+        "verdict": grade.verdict,
+        "feedback": list(grade.feedback),
+        "provider": getattr(grader, "provider_id", "unknown"),
+        "model": getattr(grader, "model", "unknown"),
+    }
     validation = ValidationRun(
         id=new_id("val"),
         workspace_id=ctx.workspace_id,
         project_id=project_id,
         content_version_id=version.id,
-        status="failed" if any(f["severity"] == "error" for f in findings) else "passed",
+        status=(
+            "failed"
+            if any(f["severity"] == "error" for f in findings)
+            or grade.verdict == "needs_revision"
+            else "passed"
+        ),
         summary_json={
             "finding_count": len(findings),
             "error_count": sum(1 for f in findings if f["severity"] == "error"),
             "warning_count": sum(1 for f in findings if f["severity"] == "warning"),
+            "semantic": semantic_summary,
         },
     )
     db.add(validation)
@@ -3140,7 +3181,7 @@ def validate_content(
         "content.validated",
         "content_version",
         version.id,
-        "Ran deterministic content validation",
+        "Ran deterministic and semantic content validation",
     )
     db.commit()
     return validation
