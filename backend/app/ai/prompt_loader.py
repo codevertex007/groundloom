@@ -16,6 +16,7 @@ _PROMPT_NAMES = frozenset(
         "citation_auditor_system.txt",
         "module_writer_system.txt",
         "evaluator_system.txt",
+        "middleware_policy.txt",
     }
 )
 

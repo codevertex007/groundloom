@@ -1,24 +1,7 @@
-"""AI engineering boundary for Groundloom.
+"""Groundloom AI harness package.
 
-Provider adapters, agent runtime behavior, prompt assets, and AI-specific
-evaluation code belong here. Product services consume these modules through
-narrow contracts and remain responsible for authorization and canonical state.
+The package is intentionally organized by Deep Agents concern: runtime,
+middleware, scoped tools, subagents, providers, prompts, and execution state.
+Provider SDKs are imported lazily by the runtime so local mode stays credential
+free and importable.
 """
-
-from .agent_runtime import (
-    AgentDefinition,
-    AgentRuntime,
-    DeepAgentsAgentRuntime,
-    LocalDeterministicAgentRuntime,
-    build_agent_runtime,
-    consume_provider_stream,
-)
-
-__all__ = [
-    "AgentDefinition",
-    "AgentRuntime",
-    "DeepAgentsAgentRuntime",
-    "LocalDeterministicAgentRuntime",
-    "build_agent_runtime",
-    "consume_provider_stream",
-]

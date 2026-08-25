@@ -1,14 +1,14 @@
 import httpx
 import pytest
-from app.config import Settings
-from app.errors import GroundloomError
-from app.retrieval import (
+from app.ai.providers.embeddings import (
     DeterministicEmbeddingProvider,
     OpenAICompatibleEmbeddingProvider,
     build_embedding_provider,
     cosine_similarity,
     hybrid_score,
 )
+from app.config import Settings
+from app.errors import GroundloomError
 
 
 def test_deterministic_embeddings_are_stable_bounded_and_dimension_safe():

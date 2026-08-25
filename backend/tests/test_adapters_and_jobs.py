@@ -3,8 +3,8 @@ import json
 from pathlib import Path
 
 import pytest
+from app.ai.state.checkpoints import PostgresCheckpointProvider, build_checkpoint_provider
 from app.auth import issue_context_token
-from app.checkpoints import PostgresCheckpointProvider, build_checkpoint_provider
 from app.config import Settings
 from app.context import RuntimeContext
 from app.errors import GroundloomError

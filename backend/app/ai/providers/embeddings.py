@@ -17,8 +17,8 @@ from typing import Protocol
 
 import httpx
 
-from ..config import Settings
-from ..errors import GroundloomError
+from ...config import Settings
+from ...errors import GroundloomError
 
 
 class EmbeddingProvider(Protocol):
@@ -174,5 +174,7 @@ def cosine_similarity(left: list[float] | None, right: list[float] | None) -> fl
 def hybrid_score(lexical_score: float, semantic_score: float) -> float:
     """Combine bounded lexical and semantic scores deterministically."""
     return max(0.0, min(1.0, 0.65 * lexical_score + 0.35 * max(0.0, semantic_score)))
+
+
 
 

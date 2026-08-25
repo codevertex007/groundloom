@@ -1,8 +1,9 @@
 import json
 
 import pytest
-from app.agent_runtime import LocalDeterministicAgentRuntime, build_agent_runtime
-from app.checkpoints import load_checkpoint, save_checkpoint
+from app.ai.runtime.factory import build_agent_runtime
+from app.ai.runtime.local import LocalDeterministicAgentRuntime
+from app.ai.state.checkpoints import load_checkpoint, save_checkpoint
 from app.config import Settings
 from app.db import build_session_factory, init_database, prepare_worker_database
 from app.errors import GroundloomError

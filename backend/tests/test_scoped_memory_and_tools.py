@@ -1,16 +1,16 @@
 from pathlib import Path
 
+from app.ai.tools.catalog import TOOL_CATALOG
 from app.config import Settings
 from app.main import create_app
-from app.tools.typed import TOOL_REGISTRY
 from fastapi.testclient import TestClient
 
 
 def test_primary_registry_excludes_canonical_commit_commands():
-    names = {tool.name for tool in TOOL_REGISTRY.values()}
+    names = {tool.name for tool in TOOL_CATALOG.values()}
     assert "accept_patch" not in names
     assert "publish_skill" not in names
-    assert all(tool.mode in {"read", "proposal"} for tool in TOOL_REGISTRY.values())
+    assert all(tool.mode in {"read", "proposal"} for tool in TOOL_CATALOG.values())
 
 
 def test_memory_is_scoped_and_secret_rejected(tmp_path: Path):
@@ -24,4 +24,3 @@ def test_memory_is_scoped_and_secret_rejected(tmp_path: Path):
     assert denied.status_code == 403
     secret = api.post("/v1/memory", headers=headers, json={"namespace": "preferences", "key": "secret", "value": {"api_key": "do-not-store"}})
     assert secret.status_code == 422
-

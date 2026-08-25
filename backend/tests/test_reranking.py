@@ -1,13 +1,13 @@
 import httpx
 import pytest
-from app.config import Settings
-from app.errors import GroundloomError
-from app.reranking import (
+from app.ai.providers.reranking import (
     CohereCompatibleReranker,
     DeterministicReranker,
     build_reranker,
     combine_rerank_scores,
 )
+from app.config import Settings
+from app.errors import GroundloomError
 
 
 def test_deterministic_reranker_is_stable_bounded_and_phrase_aware():

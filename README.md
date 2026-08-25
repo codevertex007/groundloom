@@ -21,7 +21,8 @@ A persistent central Deep Agent owns the adaptive semantic loop; typed tools, sc
 
 AI contribution boundaries are documented in
 [`docs/architecture/ai-contribution-boundary.md`](docs/architecture/ai-contribution-boundary.md):
-AI implementation lives under `backend/app/ai/` and `frontend/src/ai/`, and
+AI implementation lives under `backend/app/ai/` and `frontend/src/ai/`, with
+explicit runtime, middleware, tools, subagents, providers, and state folders;
 system prompts are reviewed `.txt` assets rather than inline orchestration
 strings.
 

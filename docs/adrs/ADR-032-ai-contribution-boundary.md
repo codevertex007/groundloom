@@ -13,16 +13,17 @@ prompt review harder without changing the product's harness-first architecture.
 ## Decision
 
 Create `backend/app/ai/` as the implementation boundary for the agent runtime,
-AI provider adapters, evaluation/retrieval logic, prompt loader, and prompt
-package data. Store system prompts as reviewed UTF-8 `.txt` assets loaded by an
-allowlisted resource loader. Keep stable root-module facades while callers
-migrate. Create `frontend/src/ai/` for focused agent-specific presentation
-components; keep API transport and canonical screen composition outside it.
+explicit middleware, scoped tools, subagent specifications, AI provider
+adapters, evaluation/retrieval logic, prompt loader, and prompt package data.
+Store system prompts as reviewed UTF-8 `.txt` assets loaded by an allowlisted
+resource loader. Remove flat root-module facades so ownership is unambiguous.
+Create `frontend/src/ai/` for focused agent-specific presentation components;
+keep API transport and canonical screen composition outside it.
 
 ## Consequences
 
-AI engineers can change prompts and provider behavior in a focused package with
-targeted tests. Backend engineers retain stable imports while owning tenant
+AI engineers can change prompts, middleware, tools, subagents, and provider
+behavior in a focused package with targeted tests. Backend engineers own tenant
 scope, persistence, deterministic commands, and workers. Prompt assets must be
 included in package data and prompt changes must update the pinned prompt
 version or document why the existing contract remains compatible. Cross-boundary

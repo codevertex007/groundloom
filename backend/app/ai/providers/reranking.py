@@ -14,8 +14,8 @@ from typing import Protocol
 
 import httpx
 
-from ..config import Settings
-from ..errors import GroundloomError
+from ...config import Settings
+from ...errors import GroundloomError
 
 
 class Reranker(Protocol):
@@ -149,5 +149,7 @@ def build_reranker(settings: Settings | None = None) -> Reranker:
 def combine_rerank_scores(base_score: float, rerank_score: float) -> float:
     """Blend bounded candidate and reranker scores without changing rank bounds."""
     return max(0.0, min(1.0, 0.7 * max(0.0, min(1.0, base_score)) + 0.3 * rerank_score))
+
+
 
 

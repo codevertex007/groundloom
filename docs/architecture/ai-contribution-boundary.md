@@ -7,15 +7,14 @@ keeping one integrated product contract.
 
 | Area | AI engineering owns | Backend/product engineering owns |
 |---|---|---|
-| Agent runtime | `backend/app/ai/agent_runtime.py`, `checkpoints.py`, `tools/`, provider harness wiring, stream projection, AI provider adapters | Authorization context, service contracts, persistence, jobs, approvals, canonical writes |
+| Agent runtime | `backend/app/ai/runtime/`, `middleware/`, `state/`, provider harness wiring, stream projection | Authorization context, service contracts, persistence, jobs, approvals, canonical writes |
 | Prompt assets | `backend/app/ai/prompts/*.txt`, reviewed and versioned with the runtime | Prompt version provenance and release/configuration validation |
-| Retrieval/evaluation | `backend/app/ai/retrieval.py`, `reranking.py`, `evaluation.py` and their provider tests | Source scope, citation lineage, derived-index lifecycle, deterministic validation invariants |
+| Retrieval/evaluation | `backend/app/ai/providers/embeddings.py`, `reranking.py`, `evaluation.py` and their provider tests | Source scope, citation lineage, derived-index lifecycle, deterministic validation invariants |
 | AI frontend | `frontend/src/ai/` focused agent/activity and AI skill-author components | Screen composition, API transport, canonical state and permissions |
 
-The root modules `app.agent_runtime`, `app.retrieval`, `app.reranking`, and
-`app.evaluation` are compatibility facades for existing backend imports. New
-AI implementation belongs under `app.ai`; backend services consume the facades
-or the explicit AI contracts and must not duplicate provider behavior.
+There are no flat AI compatibility modules in `app/`. Backend services import
+the explicit AI contracts under `app.ai`; deterministic product services remain
+outside that package and must not duplicate provider behavior.
 
 ## Prompt contract
 

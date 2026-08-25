@@ -2,15 +2,15 @@ import json
 
 import httpx
 import pytest
-from app.config import Settings
-from app.errors import GroundloomError
-from app.evaluation import (
+from app.ai.providers.evaluation import (
     DeterministicSemanticGrader,
     OpenAICompatibleSemanticGrader,
     RubricVersion,
     build_grader,
     run_evaluation_cases,
 )
+from app.config import Settings
+from app.errors import GroundloomError
 from app.telemetry import LocalTelemetry, record_evaluation
 
 

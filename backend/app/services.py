@@ -16,13 +16,15 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .checkpoints import save_checkpoint
+from .ai.providers.embeddings import build_embedding_provider, cosine_similarity, hybrid_score
+from .ai.providers.evaluation import RubricVersion, build_grader
+from .ai.providers.reranking import build_reranker, combine_rerank_scores
+from .ai.state.checkpoints import save_checkpoint
 from .config import Settings
 from .content_types import validate_block_payload
 from .context import RuntimeContext
 from .db import set_tenant_context, set_worker_context
 from .errors import GroundloomError
-from .evaluation import RubricVersion, build_grader
 from .ids import new_id
 from .models import (
     AgentRun,
@@ -62,8 +64,6 @@ from .models import (
     utcnow,
 )
 from .object_store import build_object_store
-from .reranking import build_reranker, combine_rerank_scores
-from .retrieval import build_embedding_provider, cosine_similarity, hybrid_score
 from .schemas import (
     DecisionIn,
     EvidenceBundle,
@@ -1205,7 +1205,7 @@ def execute_deep_agent_turn(
     if enforce_run_budget(db, ctx, run):
         checkpoint_local_run(settings, ctx, run, "waiting_for_budget")
         return
-    from .agent_runtime import build_agent_runtime
+    from .ai.runtime.factory import build_agent_runtime
 
     thread = db.query(AgentThread).filter_by(id=run.thread_id, workspace_id=ctx.workspace_id).first()
     if not thread:

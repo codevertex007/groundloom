@@ -33,8 +33,8 @@ def test_pinned_deepagents_graph_compiles_without_provider_credentials():
 def test_groundloom_deepagents_runtime_builds_scoped_harness_without_credentials(monkeypatch):
     deepagents = pytest.importorskip("deepagents")
     fake_models = pytest.importorskip("langchain_core.language_models.fake_chat_models")
-    from app import agent_runtime
-    from app.agent_runtime import DeepAgentsAgentRuntime
+    from app.ai.runtime import provider as runtime_provider
+    from app.ai.runtime.provider import DeepAgentsAgentRuntime
     from app.config import Settings
 
     settings = Settings(
@@ -49,29 +49,59 @@ def test_groundloom_deepagents_runtime_builds_scoped_harness_without_credentials
         def open(self):
             yield None
 
-    monkeypatch.setattr(agent_runtime, "build_checkpoint_provider", lambda _settings: FakeCheckpointProvider())
+    monkeypatch.setattr(
+        runtime_provider,
+        "build_checkpoint_provider",
+        lambda _settings: FakeCheckpointProvider(),
+    )
 
     def create_with_fake_model(**kwargs):
-        kwargs["model"] = fake_models.FakeListChatModel(responses=["bounded harness response"])
+        class ToolCapableFakeModel(fake_models.FakeListChatModel):
+            def bind_tools(self, _tools, **_kwargs):
+                return self
+
+        kwargs["model"] = ToolCapableFakeModel(responses=["bounded harness response"])
         compiled = deepagents.create_deep_agent(**kwargs)
         assert type(compiled).__name__ == "CompiledStateGraph"
+        actual = compiled.invoke(
+            {"messages": [{"role": "user", "content": "hello"}]},
+            config={"configurable": {"thread_id": "probe-thread"}},
+            context={
+                "workspace_id": "workspace-1",
+                "project_id": "project-1",
+                "thread_key": "probe-thread",
+                "settings": settings,
+                "progress_callback": None,
+                "cancel_check": None,
+                "max_tool_calls": 4,
+                "tool_calls_used": 0,
+            },
+        )
+        assert actual["messages"][-1].content == "bounded harness response"
 
         class CompiledProbe:
-            def invoke(self, _input, *, config):
+            def invoke(self, _input, *, config, context):
                 assert config["configurable"]["thread_id"] == "project:project-1:primary"
+                assert context["project_id"] == "project-1"
                 return {"messages": [SimpleNamespace(content="bounded harness response")]}
 
         return CompiledProbe()
 
     runtime._create_deep_agent = create_with_fake_model
-    result = runtime.invoke(None, None, "project-1", "project:project-1:primary", "hello")
+    result = runtime.invoke(
+        None,
+        SimpleNamespace(workspace_id="workspace-1"),
+        "project-1",
+        "project:project-1:primary",
+        "hello",
+    )
     assert result["messages"][-1].content == "bounded harness response"
 
 
 def test_groundloom_deepagents_runtime_projects_provider_stream(monkeypatch):
     pytest.importorskip("deepagents")
-    from app import agent_runtime
-    from app.agent_runtime import DeepAgentsAgentRuntime
+    from app.ai.runtime import provider as runtime_provider
+    from app.ai.runtime.provider import DeepAgentsAgentRuntime
     from app.config import Settings
 
     settings = Settings(
@@ -86,12 +116,17 @@ def test_groundloom_deepagents_runtime_projects_provider_stream(monkeypatch):
         def open(self):
             yield None
 
-    monkeypatch.setattr(agent_runtime, "build_checkpoint_provider", lambda _settings: FakeCheckpointProvider())
+    monkeypatch.setattr(
+        runtime_provider,
+        "build_checkpoint_provider",
+        lambda _settings: FakeCheckpointProvider(),
+    )
     observed: dict[str, object] = {}
 
     class CompiledProbe:
-        def stream(self, _input, *, config, stream_mode):
+        def stream(self, _input, *, config, context, stream_mode):
             observed["config"] = config
+            observed["context"] = context
             observed["stream_mode"] = stream_mode
             yield (
                 "updates",
@@ -124,7 +159,7 @@ def test_groundloom_deepagents_runtime_projects_provider_stream(monkeypatch):
     events: list[tuple[str, dict]] = []
     result = runtime.invoke(
         None,
-        None,
+        SimpleNamespace(workspace_id="workspace-1"),
         "project-1",
         "project:project-1:primary",
         "search",

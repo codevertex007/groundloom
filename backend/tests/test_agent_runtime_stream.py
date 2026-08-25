@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.agent_runtime import consume_provider_stream
+from app.ai.runtime.streaming import consume_provider_stream
 
 
 def test_provider_stream_projects_bounded_tool_and_subagent_progress():

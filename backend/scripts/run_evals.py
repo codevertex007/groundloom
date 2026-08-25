@@ -2,7 +2,11 @@
 
 import json
 
-from app.evaluation import DeterministicSemanticGrader, RubricVersion, run_evaluation_cases
+from app.ai.providers.evaluation import (
+    DeterministicSemanticGrader,
+    RubricVersion,
+    run_evaluation_cases,
+)
 from app.telemetry import LocalTelemetry, record_evaluation
 
 if __name__ == "__main__":

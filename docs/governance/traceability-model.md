@@ -21,7 +21,7 @@ Example:
 FR-CONTENT-008 proposed edits are non-canonical
 → ARCH-STATE-004 proposal/commit separation
 → ADR-006
-→ TOOL-CONTENT-003 propose_block_patch
+→ TOOL-CONT-003 propose_text_patch
 → components/patches-and-review.md
 → IMPL-05-017
 → TEST-CONTRACT-042 and TEST-E2E-011

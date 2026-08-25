@@ -152,12 +152,12 @@ These can be separate processes from one repository. Do not begin with a fleet o
 
 ## 5. Harness boundary and deterministic substrate
 
-Implementation ownership is split explicitly: AI runtime/provider/evaluation
-code and prompt assets live under `backend/app/ai/`, focused agent UI lives
-under `frontend/src/ai/`, and deterministic product services remain responsible
-for authorization, persistence, workers, and canonical commands. See the
-[AI contribution boundary](ai-contribution-boundary.md) and ADR-032 for the
-prompt asset and compatibility-facade contract.
+Implementation ownership is split explicitly: AI runtime, middleware, scoped
+tools, subagents, providers, execution state, and prompt assets live under
+`backend/app/ai/`; focused agent UI lives under `frontend/src/ai/`; deterministic
+product services remain responsible for authorization, persistence, workers,
+and canonical commands. See the [AI contribution boundary](ai-contribution-boundary.md)
+and ADR-032 for the prompt asset and package-boundary contract.
 
 Groundloom should expose one primary project-agent runtime plus a small registry of supporting agents and deterministic jobs.
 
@@ -1003,59 +1003,34 @@ The separate quality control plane already planned for recurring issues can cons
 ```text
 backend/
   app/
-    api/
-      routers/
-      schemas/
-      dependencies/
-      streaming/
-    domain/
-      projects/
-      sources/
-      skills/
-      content/
-      runs/
-      exports/
-      quality/
-    agents/
-      registry.py
-      factory.py
-      project_agent.py
-      state.py
-      prompts.py
-      skill_author.py
-      specialists/
-        source_researcher.py
-        outline_architect.py
-        module_writer.py
-        citation_auditor.py
-        assessment_writer.py
-        quality_grader.py
-    workflows/
-      source_ingestion/
-        workflow.py
-        state.py
-        steps.py
-      export/
-      maintenance/
-    middleware/
-      project_context.py
-      tenant_scope.py
-      tool_visibility.py
-      planning.py
-      validation_hooks.py
-      tracing.py
-      budgets.py
-    tools/
-      project_tools.py
-      retrieval_tools.py
-      content_tools.py
-      quality_tools.py
-      export_tools.py
-    retrieval/
-      indexing.py
-      hybrid_search.py
-      reranker.py
-      evidence.py
+    ai/
+      contracts.py
+      runtime/
+        factory.py
+        local.py
+        provider.py
+        streaming.py
+      middleware/
+        builder.py
+        context.py
+        progress.py
+        safety.py
+      tools/
+        catalog.py
+        registry.py
+        project.py
+        sources.py
+        content.py
+        memory.py
+      subagents/
+        specs.py
+      providers/
+        embeddings.py
+        reranking.py
+        evaluation.py
+      prompts/*.txt
+      state/checkpoints.py
+    deterministic product services, persistence, workers, and API modules
     skills/
       parser.py
       validator.py

@@ -1,6 +1,6 @@
-"""Compatibility facade for the AI execution checkpoint adapter."""
+"""AI execution state adapters."""
 
-from .ai.checkpoints import (
+from .checkpoints import (
     PostgresCheckpointProvider,
     build_checkpoint_provider,
     checkpoint_path,

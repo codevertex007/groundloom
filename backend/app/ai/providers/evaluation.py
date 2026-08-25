@@ -11,9 +11,9 @@ from typing import Protocol
 
 import httpx
 
-from ..config import Settings
-from ..errors import GroundloomError
-from .prompt_loader import load_prompt
+from ...config import Settings
+from ...errors import GroundloomError
+from ..prompt_loader import load_prompt
 
 
 @dataclass(frozen=True)
@@ -202,4 +202,5 @@ def run_evaluation_cases(
         "failed": len(results) - passed,
         "results": results,
     }
+
 
