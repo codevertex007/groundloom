@@ -25,6 +25,14 @@ GET/PUT  /workspace/retention-policy
 GET/PUT  /workspace/preferences
 ```
 
+Completed export DTOs include a short-lived `download_url` capability. The
+URL contains a token scoped to the authenticated user, workspace, and one
+export ID; `GET /exports/{id}/download` requires that token and does not accept
+raw workspace headers as a substitute. Expired, tampered, wrong-artifact, or
+missing capabilities return the same `401 UNAUTHENTICATED` boundary without
+revealing artifact existence. Active membership and export expiry are checked
+again before bytes are read, and successful downloads are audited.
+
 Use 400 invalid request, 401 unauthenticated, 403 authorized identity lacking action without existence leak, 404 accessible resource absent, 409 version/state/idempotency conflict, 422 domain validation, 429 budget/rate, 503 transient dependency. Error body follows `error-taxonomy.md`.
 
 The project message command serializes active mutation turns with a partial

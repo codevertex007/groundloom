@@ -1,6 +1,8 @@
-from app.auth import issue_context_token
+import pytest
+from app.auth import issue_context_token, issue_download_token
 from app.config import Settings
 from app.db import set_tenant_context, set_worker_context
+from app.errors import GroundloomError
 from app.main import create_app
 from app.migrations import _RLS_WORKSPACE_TABLES, _apply_postgres_rls
 from app.models import AgentRun
@@ -88,3 +90,21 @@ def test_configured_provider_failure_is_retryable_and_never_local_success(tmp_pa
         with app.state.session_factory() as db:
             run = db.query(AgentRun).filter_by(project_id=project["id"], status="failed").one()
             assert run.status == "failed"
+
+
+def test_download_token_is_short_lived_and_scoped_to_one_artifact():
+    token = issue_download_token(
+        "user-a", "workspace-a", "export-a", "download-secret", expires_in_seconds=60
+    )
+    from app.auth import verify_download_token
+
+    assert verify_download_token(token, "download-secret", "export-a") == (
+        "user-a",
+        "workspace-a",
+    )
+    with pytest.raises(GroundloomError) as wrong_artifact:
+        verify_download_token(token, "download-secret", "export-b")
+    assert wrong_artifact.value.code == "UNAUTHENTICATED"
+    with pytest.raises(GroundloomError) as tampered:
+        verify_download_token(token + "x", "download-secret", "export-a")
+    assert tampered.value.code == "UNAUTHENTICATED"

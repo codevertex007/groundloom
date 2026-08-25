@@ -79,6 +79,59 @@ def test_project_deletion_is_scoped_audited_and_removes_artifacts(tmp_path: Path
     assert not [item for item in (tmp_path / "objects").rglob("*") if item.is_file()]
 
 
+def test_project_deletion_preserves_source_artifacts_shared_by_another_project(tmp_path: Path):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'shared-deletion.db'}",
+        object_store_path=tmp_path / "objects",
+    )
+    app = create_app(settings)
+    api = TestClient(app)
+    source = api.post(
+        "/v1/sources/uploads",
+        headers=headers(),
+        json={
+            "name": "Shared evidence",
+            "filename": "shared.txt",
+            "content_base64": base64.b64encode(b"keep this shared evidence").decode(),
+        },
+    ).json()
+    source_version_id = source["current_version_id"]
+    first = api.post(
+        "/v1/projects",
+        headers=headers(),
+        json={
+            "name": "First project",
+            "brief": "Delete only this project",
+            "source_version_ids": [source_version_id],
+        },
+    ).json()
+    second = api.post(
+        "/v1/projects",
+        headers=headers(),
+        json={
+            "name": "Second project",
+            "brief": "Keep the shared evidence",
+            "source_version_ids": [source_version_id],
+        },
+    ).json()
+    deletion = api.post(
+        f"/v1/projects/{first['id']}/deletion",
+        headers=headers(),
+        json={"idempotency_key": "delete-first-only"},
+    )
+    assert deletion.status_code == 202
+    ctx = RuntimeContext(
+        "local-user", "local-workspace", frozenset({"workspace_admin"}), "shared-delete-worker"
+    )
+    with app.state.session_factory() as db:
+        result = run_deletion_worker_once(db, ctx, settings, "test-shared-retention-worker")
+        assert result["completed"] == 1
+        assert db.query(Project).filter_by(id=first["id"]).first() is None
+        assert db.query(Project).filter_by(id=second["id"]).first() is not None
+        assert db.query(SourceVersion).filter_by(id=source_version_id).first() is not None
+    assert list((tmp_path / "objects").rglob("*"))
+
+
 def test_legal_hold_blocks_deletion_without_removing_project(tmp_path: Path):
     settings = Settings(
         database_url=f"sqlite:///{tmp_path / 'hold.db'}",

@@ -2,7 +2,7 @@
 
 ## Checklist
 
-- [x] `IMPL-08-001` Threat-model boundary, signed runtime identity, cross-tenant/tool/memory/skill/artifact tests; live identity/RLS review remains deployment evidence.
+- [x] `IMPL-08-001` Threat-model boundary, signed runtime identity, short-lived artifact download capabilities, cross-tenant/tool/memory/skill/artifact tests; live identity/RLS review remains deployment evidence.
 - [x] `IMPL-08-002` Upload/parser safety limits, MIME-spoof rejection, source-instruction signals, path-safe artifacts, and dependency audit; sandbox/container review remains deployment evidence.
 - [x] `IMPL-08-003` Local failure/replay tests for leased ingestion, object-store paths, provider configuration, and bounded retries; live database/provider interruption injection remains open.
 - [x] `IMPL-08-004` Local checksum-backed backup/restore exercise; production Postgres/object-store restore remains open.

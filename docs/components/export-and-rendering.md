@@ -4,4 +4,4 @@ Owns immutable render templates/versions, export request/job, artifact metadata,
 
 Workers render in an isolated environment, validate output, store once by idempotency key, and emit status events. HTML/PDF/DOCX support is adapter-based; initial target is PDF + DOCX pending `OQ-001`.
 
-Required tests: exact version selection, duplicate request/replay, template failure, worker death, malicious content/assets, output validation, large document bounds, cancellation, expiry, signed-download permission, and provenance metadata.
+Required tests: exact version selection, duplicate request/replay, template failure, worker death, malicious content/assets, output validation, large document bounds, cancellation, expiry, short-lived artifact capabilities (missing/tampered/wrong-artifact/revoked-membership), signed-download permission, and provenance metadata.

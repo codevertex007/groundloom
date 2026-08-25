@@ -3676,11 +3676,34 @@ def process_deletion_request(
         request.lease_until = None
         db.commit()
         return request
-    source_versions = [
-        row
-        for config in db.query(ProjectConfigVersion).filter_by(project_id=project.id, workspace_id=ctx.workspace_id).all()
-        for row in db.query(SourceVersion).filter(SourceVersion.id.in_(config.source_version_ids or [])).all()
-    ]
+    selected_source_version_ids = {
+        source_version_id
+        for config in db.query(ProjectConfigVersion)
+        .filter_by(project_id=project.id, workspace_id=ctx.workspace_id)
+        .all()
+        for source_version_id in (config.source_version_ids or [])
+    }
+    shared_source_version_ids = {
+        source_version_id
+        for config in db.query(ProjectConfigVersion)
+        .filter(
+            ProjectConfigVersion.workspace_id == ctx.workspace_id,
+            ProjectConfigVersion.project_id != project.id,
+        )
+        .all()
+        for source_version_id in (config.source_version_ids or [])
+    }
+    removable_source_version_ids = selected_source_version_ids - shared_source_version_ids
+    source_versions = (
+        db.query(SourceVersion)
+        .filter(
+            SourceVersion.workspace_id == ctx.workspace_id,
+            SourceVersion.id.in_(removable_source_version_ids),
+        )
+        .all()
+        if removable_source_version_ids
+        else []
+    )
     export_keys = [
         row.object_key
         for row in db.query(ExportJob).filter_by(project_id=project.id, workspace_id=ctx.workspace_id).all()

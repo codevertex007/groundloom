@@ -56,3 +56,9 @@ the migration process also initializes the LangGraph checkpoint schema, while
 the API and worker roles receive runtime DML privileges only. The
 transaction-local service marker is metadata only, and the production API role
 must not be the policy-bypassing owner.
+Export download URLs are short-lived HMAC capabilities containing the issuing
+user, trusted workspace, and exactly one export ID. The download endpoint
+revalidates active membership and artifact expiry before reading the object;
+the local adapter derives a clearly development-only signer from the local
+workspace when no auth secret is configured. `download_token_ttl_seconds` is
+bounded to one hour in the settings schema.

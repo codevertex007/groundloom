@@ -1,12 +1,13 @@
 import json
 from collections.abc import Generator
+from datetime import UTC
 
 from fastapi import Depends, FastAPI, File, Header, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 
-from .auth import verify_context_token
+from .auth import issue_download_token, verify_context_token, verify_download_token
 from .config import Settings, get_settings
 from .context import RuntimeContext, resolve_context
 from .db import build_session_factory, init_database, make_engine
@@ -24,6 +25,7 @@ from .models import (
     Project,
     PublicEvent,
     Skill,
+    utcnow,
 )
 from .object_store import build_object_store
 from .schemas import (
@@ -67,6 +69,7 @@ from .schemas import (
 from .services import (
     accept_outline,
     accept_patch,
+    audit,
     author_skill_draft,
     content_blocks,
     create_patch,
@@ -929,7 +932,7 @@ def register_routes(app: FastAPI) -> FastAPI:
         ctx: RuntimeContext = Depends(get_ctx),
     ):
         job = export_content(db, ctx, request.app.state.settings, body)
-        return export_dto(job, request)
+        return export_dto(job, request, ctx)
 
     @app.post(
         "/v1/projects/{project_id}/deletion",
@@ -1007,17 +1010,33 @@ def register_routes(app: FastAPI) -> FastAPI:
         job = db.query(ExportJob).filter_by(id=export_id, workspace_id=ctx.workspace_id).first()
         if not job:
             raise GroundloomError("RESOURCE_NOT_FOUND", "The export was not found.", 404)
-        return export_dto(job, request)
+        return export_dto(job, request, ctx)
 
     @app.get("/v1/exports/{export_id}/download")
     def export_download(
         export_id: str,
         request: Request,
+        token: str | None = Query(default=None),
         db: Session = Depends(get_db),
-        ctx: RuntimeContext = Depends(get_ctx),
     ):
-        job = db.query(ExportJob).filter_by(id=export_id, workspace_id=ctx.workspace_id).first()
+        settings = request.app.state.settings
+        user_id, workspace_id = verify_download_token(
+            token,
+            settings.auth_secret or f"local-download:{settings.local_workspace_id}",
+            export_id,
+        )
+        ctx = resolve_context(db, settings, user_id, workspace_id, None)
+        ctx.require(
+            "download artifacts",
+            {"viewer", "author", "reviewer", "workspace_admin", "organization_admin"},
+        )
+        job = db.query(ExportJob).filter_by(id=export_id, workspace_id=workspace_id).first()
         if not job or job.status != "completed" or not job.object_key:
+            raise GroundloomError("RESOURCE_NOT_FOUND", "The artifact was not found.", 404)
+        expires_at = job.expires_at
+        if expires_at and expires_at.tzinfo is None:
+            expires_at = expires_at.replace(tzinfo=UTC)
+        if expires_at and expires_at <= utcnow():
             raise GroundloomError("RESOURCE_NOT_FOUND", "The artifact was not found.", 404)
         try:
             data = request.app.state.object_store.get_bytes(job.object_key)
@@ -1037,6 +1056,8 @@ def register_routes(app: FastAPI) -> FastAPI:
                 503,
                 retryable=True,
             )
+        audit(db, ctx, "export.downloaded", "export_job", job.id, "Issued authorized artifact download")
+        db.commit()
         media_type = {
             "pdf": "application/pdf",
             "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
@@ -1052,7 +1073,20 @@ def register_routes(app: FastAPI) -> FastAPI:
     return app
 
 
-def export_dto(job: ExportJob, request: Request) -> dict:
+def export_dto(job: ExportJob, request: Request, ctx: RuntimeContext) -> dict:
+    download_url = None
+    if job.status == "completed" and job.object_key:
+        settings = request.app.state.settings
+        token = issue_download_token(
+            ctx.user_id,
+            ctx.workspace_id,
+            job.id,
+            settings.auth_secret or f"local-download:{settings.local_workspace_id}",
+            expires_in_seconds=settings.download_token_ttl_seconds,
+        )
+        download_url = (
+            f"{settings.public_base_url}/v1/exports/{job.id}/download?token={token}"
+        )
     return {
         "id": job.id,
         "project_id": job.project_id,
@@ -1060,9 +1094,7 @@ def export_dto(job: ExportJob, request: Request) -> dict:
         "format": job.format,
         "status": job.status,
         "object_key": job.object_key,
-        "download_url": f"{request.app.state.settings.public_base_url}/v1/exports/{job.id}/download"
-        if job.status == "completed"
-        else None,
+        "download_url": download_url,
         "expires_at": job.expires_at,
         "error_code": job.error_code,
     }

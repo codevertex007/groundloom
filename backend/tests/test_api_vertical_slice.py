@@ -1,5 +1,6 @@
 import base64
 from pathlib import Path
+from urllib.parse import urlparse
 
 from app.auth import issue_context_token
 from app.config import Settings
@@ -455,8 +456,13 @@ def test_skill_publish_validation_and_export(tmp_path):
         },
     )
     assert export.status_code == 202 and export.json()["status"] == "completed"
-    download = api.get(f"/v1/exports/{export.json()['id']}/download", headers=headers())
+    download_url = urlparse(export.json()["download_url"])
+    download = api.get(
+        f"{download_url.path}?{download_url.query}",
+        headers={"X-Correlation-ID": "download-test"},
+    )
     assert download.status_code == 200 and download.content.startswith(b"%PDF")
+    assert api.get(f"/v1/exports/{export.json()['id']}/download").status_code == 401
 
 
 def test_retrieval_reranks_expands_neighbors_and_deduplicates_blocks(tmp_path):

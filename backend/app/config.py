@@ -75,6 +75,7 @@ class Settings(BaseSettings):
     event_retention_days: int = 90
     auth_secret: str | None = None
     auth_mode: str = "local"
+    download_token_ttl_seconds: int = Field(default=300, ge=30, le=3600)
 
     @field_validator("cors_origins", mode="before")
     @classmethod

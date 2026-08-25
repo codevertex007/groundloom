@@ -6,10 +6,12 @@ Deletion is a durable coordinated workflow: mark inaccessible/pending; revoke UR
 
 The local implementation provides this project-scoped slice through the project
 deletion request and deletion status endpoints. It persists a DeletionRequest,
-moves the project to deletion_pending, cancels active runs, removes unshared
-source versions and derived blocks/chunks, removes content/run/export records
-and local checkpoints, deletes object-store artifacts through the scoped
-adapter, and records RetentionDeletionRequested and
+moves the project to deletion_pending, cancels active runs, removes only source
+versions and object artifacts that are not selected by another project (shared
+immutable source versions and their bytes are preserved), removes derived
+blocks/chunks, removes content/run/export records and local checkpoints, deletes
+eligible object-store artifacts through the scoped adapter, and records
+RetentionDeletionRequested and
 RetentionDeletionCompleted. The retention worker claims the request with a
 bounded lease. A workspace RetentionPolicy legal hold blocks the workflow and
 is audited; failed object or database steps remain retryable. Production still

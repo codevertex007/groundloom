@@ -19,3 +19,8 @@
 - **SEC-AUTH-006:** Authorization denials MUST not reveal whether an inaccessible object exists.
 
 Default deny applies when a role/action pairing is absent. Test each tool and service with allowed, wrong-workspace, revoked-membership, and invented-ID cases.
+
+Completed artifact downloads use a short-lived signed capability issued only
+after the caller's workspace role is resolved. The capability is scoped to one
+export ID and is rechecked against active membership and artifact expiry; it is
+not a general object-store credential.
