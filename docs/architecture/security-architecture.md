@@ -12,7 +12,8 @@ Cross-tenant access, malicious uploads, prompt injection, tool abuse, data exfil
 - Scope retrieval, skills, memory, files, checkpoints, artifacts, and traces by trusted context.
 - Treat documents, user content, and model output as untrusted data.
 - Validate typed inputs/outputs; separate proposal tools from commit commands.
-- Malware scan and sanitize uploads; sandbox risky parsers/renderers; block active content.
+- Malware scan and sanitize uploads; source safety can terminate a version in
+  `quarantined` state; sandbox risky parsers/renderers; block active content.
 - No unrestricted production shell/network. Any code sandbox gets resource/network/filesystem limits and short-lived credentials.
 - Organization policy and published skills are immutable/read-only to runtime agents.
 - Redact telemetry and use a secret manager.

@@ -58,6 +58,10 @@ class Settings(BaseSettings):
     evaluator_api_key: str | None = None
     evaluator_base_url: str | None = None
     evaluator_timeout_seconds: float = Field(default=20.0, gt=0, le=120)
+    source_scanner_provider: str = "local"
+    source_scanner_base_url: str | None = None
+    source_scanner_api_key: str | None = None
+    source_scanner_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
     telemetry_provider: str = "local"
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
@@ -125,6 +129,14 @@ class Settings(BaseSettings):
                 (self.langfuse_public_key, self.langfuse_secret_key, self.langfuse_host)
             ):
                 raise RuntimeError("Production Langfuse telemetry requires keys and host")
+            if self.source_scanner_provider == "local":
+                raise RuntimeError("Production requires an explicitly configured source safety scanner")
+            if self.source_scanner_provider in {"http", "http-compatible"} and not all(
+                (self.source_scanner_base_url, self.source_scanner_api_key)
+            ):
+                raise RuntimeError(
+                    "The configured production source safety scanner requires endpoint and API key"
+                )
 
     def _validate_runtime_database_roles(self) -> None:
         if not self.worker_database_url:
@@ -170,11 +182,16 @@ class Settings(BaseSettings):
             "embedding_provider": self.embedding_provider,
             "embedding_model": self.embedding_model,
             "embedding_dimensions": self.embedding_dimensions,
+            "embedding_base_url": self.embedding_base_url,
             "retrieval_index_backend": self.retrieval_index_backend,
             "reranker_provider": self.reranker_provider,
             "reranker_model": self.reranker_model,
+            "reranker_base_url": self.reranker_base_url,
             "evaluator_provider": self.evaluator_provider,
             "evaluator_model": self.evaluator_model,
+            "evaluator_base_url": self.evaluator_base_url,
+            "source_scanner_provider": self.source_scanner_provider,
+            "source_scanner_base_url": self.source_scanner_base_url,
             "telemetry_provider": self.telemetry_provider,
             "agent_inline_local": self.agent_inline_local,
             "agent_max_attempts": self.agent_max_attempts,

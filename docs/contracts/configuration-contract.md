@@ -31,6 +31,14 @@ Semantic evaluation defaults to the deterministic rubric grader. The optional
 `openai-compatible` evaluator uses bounded structured JSON from a
 `/chat/completions` adapter with an explicit model, API key, endpoint, and
 timeout; it never replaces deterministic citation or structure checks.
+Source safety defaults to deterministic local checks for development, including
+the standard antivirus fixture, active PDF actions, and active/macro-enabled
+DOCX features. The deployment `http` scanner adapter posts bounded source
+bytes to a configured scanner sidecar and accepts only `clean` or `quarantine`
+verdicts; outages and malformed responses are typed failures. Production
+rejects the local scanner setting. Multipart uploads are read in bounded
+chunks and stop once `max_upload_bytes` is exceeded; the endpoint never loads
+an unbounded file into memory before applying the upload limit.
 S3-compatible storage calls use `object_store_max_attempts` (default 3) with
 `object_store_connect_timeout_seconds` (default 5) and
 `object_store_read_timeout_seconds` (default 30). Storage SDK failures are

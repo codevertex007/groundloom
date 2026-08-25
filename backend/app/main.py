@@ -220,6 +220,21 @@ def get_ctx(
     return resolve_context(db, settings, x_user_id, x_workspace_id, x_correlation_id)
 
 
+async def _read_upload_bounded(upload: UploadFile, maximum: int) -> bytes:
+    """Read multipart content without loading an unbounded body into memory."""
+    chunks: list[bytes] = []
+    total = 0
+    while True:
+        chunk = await upload.read(min(1024 * 1024, maximum - total + 1))
+        if not chunk:
+            break
+        total += len(chunk)
+        if total > maximum:
+            raise GroundloomError("INVALID_INPUT", "The upload exceeds the configured size limit.", 422)
+        chunks.append(chunk)
+    return b"".join(chunks)
+
+
 def register_routes(app: FastAPI) -> FastAPI:
     def _health_snapshot(request: Request, db: Session) -> dict:
         settings: Settings = request.app.state.settings
@@ -579,7 +594,7 @@ def register_routes(app: FastAPI) -> FastAPI:
     ):
         import base64
 
-        raw = await file.read()
+        raw = await _read_upload_bounded(file, request.app.state.settings.max_upload_bytes)
         body = UploadFinalize(
             name=name,
             filename=file.filename or "source.txt",

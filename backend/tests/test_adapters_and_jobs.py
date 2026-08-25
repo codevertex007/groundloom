@@ -106,6 +106,9 @@ def test_production_requires_postgres_checkpoint_and_s3_storage():
         langfuse_secret_key="sk-test",
         langfuse_host="https://langfuse.example",
         agent_inline_local=False,
+        source_scanner_provider="http",
+        source_scanner_base_url="https://scanner.example",
+        source_scanner_api_key="scanner-test-key",
     )
     settings.validate_runtime()
     assert isinstance(build_checkpoint_provider(settings), PostgresCheckpointProvider)

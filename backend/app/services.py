@@ -79,6 +79,7 @@ from .schemas import (
     UploadFinalize,
     WorkspacePreferencesUpdate,
 )
+from .source_safety import build_source_scanner
 from .vector_store import build_vector_index_store
 
 
@@ -1965,6 +1966,18 @@ def process_ingestion_job(
     version.status = "scanning"
     append_source_stage(db, ctx, version, "scanning")
     try:
+        build_source_scanner(settings).scan(raw, extension)
+    except GroundloomError as exc:
+        version.status = "quarantined" if exc.code == "SOURCE_QUARANTINED" else "failed"
+        version.failure_code = exc.code
+        job.status = "failed"
+        job.stage = "failed"
+        job.error_code = exc.code
+        job.lease_owner = None
+        job.lease_until = None
+        append_source_stage(db, ctx, version, version.status)
+        raise
+    try:
         text = parse_source(raw, extension)
     except (KeyError, OSError, ValueError, zipfile.BadZipFile, ElementTree.ParseError) as exc:
         version.status = "failed"
@@ -2099,6 +2112,7 @@ def run_ingestion_worker_once(
             db.commit()
             completed += 1
         except GroundloomError as exc:
+            quarantined = exc.code == "SOURCE_QUARANTINED"
             db.rollback()
             failed_job = (
                 db.query(IngestionJob)
@@ -2120,7 +2134,7 @@ def run_ingestion_worker_once(
                     .first()
                 )
                 if failed_version:
-                    failed_version.status = "failed"
+                    failed_version.status = "quarantined" if quarantined else "failed"
                     failed_version.failure_code = exc.code
                 db.commit()
             failed += 1

@@ -8,7 +8,7 @@
 - [x] `IMPL-02-004` Versioned deterministic chunking/indexing with an explicit scoped, idempotent rebuild worker that persists deterministic local or configured-provider embeddings and mirrors deployment vectors into the scoped pgvector derived table through migration 015.
 - [x] `IMPL-02-005` Authorized bounded hybrid lexical/semantic evidence search with selected-version filtering, deterministic/provider reranking, same-version neighbor expansion, duplicate suppression, and typed provider failure handling.
 - [x] `IMPL-02-006` Passage read/navigation APIs and citation-lineage primitives.
-- [x] `IMPL-02-007` Prompt-injection/sanitization signals and adversarial source fixture coverage.
+- [x] `IMPL-02-007` Prompt-injection/sanitization signals, deterministic source quarantine, bounded HTTP scanner adapter, and adversarial source fixture coverage.
 - [x] `IMPL-02-008` Local replay/failure and security fixtures; production-scale golden retrieval/load/deletion exercise remains a release gate.
 
 ## Exit gate
