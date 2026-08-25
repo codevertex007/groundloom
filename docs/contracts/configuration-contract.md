@@ -19,6 +19,10 @@ dimension, endpoint, and timeout. `local` uses deterministic hashing for
 credential-free development. `openai`/`openai-compatible` uses a narrow
 OpenAI-compatible `/embeddings` adapter and requires an API key; provider
 outages and malformed dimensions become typed redacted dependency errors.
+`retrieval_index_backend=auto` selects the local JSON index for SQLite and the
+pgvector derived index for PostgreSQL. Production rejects an explicit local
+index. Migration `015_pgvector_source_embeddings` owns the deployment table;
+the migration role must be able to use an installed pgvector extension.
 S3-compatible storage calls use `object_store_max_attempts` (default 3) with
 `object_store_connect_timeout_seconds` (default 5) and
 `object_store_read_timeout_seconds` (default 30). Storage SDK failures are

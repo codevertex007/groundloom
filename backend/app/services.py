@@ -77,6 +77,7 @@ from .schemas import (
     UploadFinalize,
     WorkspacePreferencesUpdate,
 )
+from .vector_store import build_vector_index_store
 
 
 def audit(
@@ -1005,12 +1006,22 @@ def search_evidence(
         .all()
     }
     query_vector = build_embedding_provider(settings).embed([query])[0]
+    vector_store = build_vector_index_store(db, settings)
+    semantic_scores = vector_store.search(
+        db,
+        workspace_id=ctx.workspace_id,
+        source_version_ids=sorted(allowed),
+        vector=query_vector,
+        limit=max(16, min(100, limit * 8)),
+    )
     ranked: list[tuple[float, SourceBlock, Source]] = []
     for block, source in blocks:
         text = block.text.lower()
         lexical_score = sum(1 for term in terms if term in text) / max(len(terms), 1)
         block_vector = chunk_vectors.get(block.id)
-        raw_semantic_score = cosine_similarity(query_vector, block_vector) if block_vector else 0.0
+        raw_semantic_score = semantic_scores.get(block.id)
+        if raw_semantic_score is None:
+            raw_semantic_score = cosine_similarity(query_vector, block_vector) if block_vector else 0.0
         semantic_score = max(0.0, raw_semantic_score)
         score = hybrid_score(lexical_score, semantic_score)
         if score > 0 and (lexical_score > 0 or raw_semantic_score >= 0.25):
@@ -1034,7 +1045,9 @@ def search_evidence(
         )
     return EvidenceBundle(
         query=query,
-        retrieval_version="hybrid.v1",
+        retrieval_version=(
+            "hybrid.pgvector.v1" if vector_store.backend_id == "pgvector" else "hybrid.v1"
+        ),
         passages=passages,
         gaps=[] if passages else ["No selected passage matched the request."],
     )
@@ -1917,6 +1930,7 @@ def process_ingestion_job(
         embeddings = build_embedding_provider(settings).embed(
             [paragraph[:5000] for paragraph in paragraphs]
         )
+        vector_store = build_vector_index_store(db, settings)
         for index, paragraph in enumerate(paragraphs):
             signals = (
                 ["possible_instruction_text"]
@@ -1936,17 +1950,24 @@ def process_ingestion_job(
             db.add(block)
             db.flush()
             terms = sorted(set(re.findall(r"[a-z0-9]{3,}", paragraph.lower())))
-            db.add(
-                SourceChunk(
-                    id=new_id("chk"),
-                    workspace_id=ctx.workspace_id,
-                    source_version_id=version.id,
-                    source_block_id=block.id,
-                    chunk_no=0,
-                    text=paragraph[:5000],
-                    token_terms=terms,
-                    embedding_json=embeddings[index],
-                )
+            chunk = SourceChunk(
+                id=new_id("chk"),
+                workspace_id=ctx.workspace_id,
+                source_version_id=version.id,
+                source_block_id=block.id,
+                chunk_no=0,
+                text=paragraph[:5000],
+                token_terms=terms,
+                embedding_json=embeddings[index],
+            )
+            db.add(chunk)
+            db.flush()
+            vector_store.upsert(
+                db,
+                workspace_id=ctx.workspace_id,
+                source_version_id=version.id,
+                source_chunk_id=chunk.id,
+                vector=embeddings[index],
             )
     version.status = "indexing"
     job.stage = "indexing"
@@ -2131,23 +2152,34 @@ def process_index_rebuild_job(
         .order_by(SourceBlock.block_no)
         .all()
     )
+    vector_store = build_vector_index_store(db, settings)
+    vector_store.delete_for_version(
+        db, workspace_id=ctx.workspace_id, source_version_id=version.id
+    )
     db.query(SourceChunk).filter_by(
         source_version_id=version.id, workspace_id=ctx.workspace_id
     ).delete(synchronize_session=False)
     embeddings = build_embedding_provider(settings).embed([block.text[:5000] for block in blocks])
     for index, block in enumerate(blocks):
         terms = sorted(set(re.findall(r"[a-z0-9]{3,}", block.text.lower())))
-        db.add(
-            SourceChunk(
-                id=new_id("chk"),
-                workspace_id=ctx.workspace_id,
-                source_version_id=version.id,
-                source_block_id=block.id,
-                chunk_no=0,
-                text=block.text[:5000],
-                token_terms=terms,
-                embedding_json=embeddings[index],
-            )
+        chunk = SourceChunk(
+            id=new_id("chk"),
+            workspace_id=ctx.workspace_id,
+            source_version_id=version.id,
+            source_block_id=block.id,
+            chunk_no=0,
+            text=block.text[:5000],
+            token_terms=terms,
+            embedding_json=embeddings[index],
+        )
+        db.add(chunk)
+        db.flush()
+        vector_store.upsert(
+            db,
+            workspace_id=ctx.workspace_id,
+            source_version_id=version.id,
+            source_chunk_id=chunk.id,
+            vector=embeddings[index],
         )
     job.status = "completed"
     job.error_code = None

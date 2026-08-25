@@ -19,6 +19,7 @@ POSTGRES_RLS_MIGRATION_ID = "011_postgres_rls_tenant_isolation"
 ACTIVE_AGENT_TURN_MIGRATION_ID = "012_active_agent_turn_uniqueness"
 WORKER_ROLE_RLS_MIGRATION_ID = "013_worker_role_rls_boundary"
 PROJECT_PRIMARY_KEY_MIGRATION_ID = "014_project_id_primary_key"
+PGVECTOR_INDEX_MIGRATION_ID = "015_pgvector_source_embeddings"
 
 _RLS_WORKSPACE_TABLES = (
     "workspace_preferences",
@@ -49,6 +50,7 @@ _RLS_WORKSPACE_TABLES = (
     "idempotency_records",
     "memory_items",
     "delegated_tasks",
+    "source_chunk_embeddings",
 )
 
 
@@ -106,6 +108,7 @@ def apply_migrations(database_url: str) -> None:
             ACTIVE_AGENT_TURN_MIGRATION_ID,
             WORKER_ROLE_RLS_MIGRATION_ID,
             PROJECT_PRIMARY_KEY_MIGRATION_ID,
+            PGVECTOR_INDEX_MIGRATION_ID,
         ]
         preference_columns = {
             column["name"] for column in inspect(engine).get_columns("workspace_preferences")
@@ -178,6 +181,32 @@ def apply_migrations(database_url: str) -> None:
                     {"id": migration_id, "at": datetime.now(UTC).isoformat()},
                 )
         if engine.dialect.name == "postgresql":
+            # pgvector is a deployment dependency. The migration role must
+            # either be permitted to install the extension or the DBA must
+            # pre-install it before running this migration.
+            connection.execute(text("CREATE EXTENSION IF NOT EXISTS vector"))
+            connection.execute(
+                text(
+                    """
+                    CREATE TABLE IF NOT EXISTS source_chunk_embeddings (
+                        source_chunk_id VARCHAR(80) PRIMARY KEY
+                            REFERENCES source_chunks(id) ON DELETE CASCADE,
+                        workspace_id VARCHAR(80) NOT NULL,
+                        source_version_id VARCHAR(80) NOT NULL,
+                        dimensions INTEGER NOT NULL CHECK (dimensions > 0),
+                        embedding vector NOT NULL,
+                        created_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW(),
+                        updated_at TIMESTAMP WITH TIME ZONE NOT NULL DEFAULT NOW()
+                    )
+                    """
+                )
+            )
+            connection.execute(
+                text(
+                    "CREATE INDEX IF NOT EXISTS ix_source_chunk_embeddings_scope "
+                    "ON source_chunk_embeddings (workspace_id, source_version_id, dimensions)"
+                )
+            )
             _apply_postgres_rls(connection)
         connection.execute(
             text(

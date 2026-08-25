@@ -16,6 +16,10 @@ The delegated specialist worker can be run with python
 backend/scripts/delegated_worker.py.
 The durable primary-agent worker can be run with python
 backend/scripts/agent_worker.py --once.
+`GROUNDLOOM_RETRIEVAL_INDEX_BACKEND=auto` keeps SQLite on the local JSON
+index and selects the pgvector derived table for PostgreSQL. The deployment-
+shaped Postgres stack requires migration 015 and an installed pgvector
+extension before source ingestion or semantic search is exercised.
 The outbox publisher requires an explicit sink and can be exercised with
 `GROUNDLOOM_OUTBOX_DELIVERY_PROVIDER=webhook`,
 `GROUNDLOOM_OUTBOX_DELIVERY_URL=<local-relay>`, and

@@ -1,5 +1,7 @@
 -- Disposable local roles for deployment-shaped Groundloom testing.
 -- These credentials are local-only examples and must never be reused.
+CREATE EXTENSION IF NOT EXISTS vector;
+
 DO $$
 BEGIN
     IF NOT EXISTS (SELECT FROM pg_roles WHERE rolname = 'groundloom_api') THEN

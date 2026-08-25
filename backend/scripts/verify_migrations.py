@@ -30,6 +30,7 @@ if __name__ == "__main__":
             "012_active_agent_turn_uniqueness",
             "013_worker_role_rls_boundary",
             "014_project_id_primary_key",
+            "015_pgvector_source_embeddings",
         ]
         if applied != expected:
             raise SystemExit(f"Unexpected migration sequence: {applied}")

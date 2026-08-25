@@ -47,6 +47,7 @@ class Settings(BaseSettings):
     embedding_api_key: str | None = None
     embedding_base_url: str | None = None
     embedding_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    retrieval_index_backend: Literal["auto", "local", "pgvector"] = "auto"
     telemetry_provider: str = "local"
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
@@ -90,6 +91,8 @@ class Settings(BaseSettings):
                 raise RuntimeError("Production requires an object storage bucket")
             if self.checkpoint_backend != "postgres":
                 raise RuntimeError("Production requires the Postgres checkpoint backend")
+            if self.retrieval_index_backend == "local":
+                raise RuntimeError("Production requires the pgvector retrieval index backend")
             if self.export_inline_local is True:
                 raise RuntimeError("Production requires exports to run through the durable worker")
             if self.agent_inline_local:
@@ -156,6 +159,7 @@ class Settings(BaseSettings):
             "embedding_provider": self.embedding_provider,
             "embedding_model": self.embedding_model,
             "embedding_dimensions": self.embedding_dimensions,
+            "retrieval_index_backend": self.retrieval_index_backend,
             "telemetry_provider": self.telemetry_provider,
             "agent_inline_local": self.agent_inline_local,
             "agent_max_attempts": self.agent_max_attempts,

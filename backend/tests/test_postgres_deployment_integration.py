@@ -14,8 +14,9 @@ from uuid import uuid4
 import pytest
 from app.config import Settings
 from app.db import build_session_factory, set_tenant_context
-from app.models import Project
+from app.models import Project, Source, SourceBlock, SourceChunk, SourceVersion, Workspace
 from app.object_store import build_object_store
+from app.vector_store import PgVectorIndexStore
 from sqlalchemy import create_engine, text
 
 
@@ -105,11 +106,20 @@ def test_postgres_checkpoint_schema_is_initialized_by_migrator() -> None:
                 for row in connection.execute(
                     text(
                         "SELECT tablename FROM pg_tables WHERE schemaname = 'public' "
-                        "AND tablename IN ('checkpoints', 'checkpoint_blobs', 'checkpoint_writes')"
+                        "AND tablename IN ('checkpoints', 'checkpoint_blobs', 'checkpoint_writes', "
+                        "'source_chunk_embeddings')"
                     )
                 )
             }
-            assert tables == {"checkpoints", "checkpoint_blobs", "checkpoint_writes"}
+            assert tables == {
+                "checkpoints",
+                "checkpoint_blobs",
+                "checkpoint_writes",
+                "source_chunk_embeddings",
+            }
+            assert connection.execute(
+                text("SELECT EXISTS (SELECT 1 FROM pg_extension WHERE extname = 'vector')")
+            ).scalar_one()
     finally:
         migration_engine.dispose()
 
@@ -130,3 +140,160 @@ def test_s3_compatible_object_store_round_trip() -> None:
     finally:
         store.delete_bytes(key)
         assert not store.exists(key)
+
+
+def test_pgvector_search_is_scoped_by_workspace_and_selected_version() -> None:
+    _api_url, worker_url, _migration_url = _required_postgres_urls()
+    api_engine = create_engine(_api_url)
+    worker_engine = create_engine(worker_url)
+    workspace_a = f"vector-a-{uuid4().hex[:12]}"
+    workspace_b = f"vector-b-{uuid4().hex[:12]}"
+    source_a = f"vector-source-a-{uuid4().hex[:12]}"
+    source_b = f"vector-source-b-{uuid4().hex[:12]}"
+    version_a = f"vector-version-a-{uuid4().hex[:12]}"
+    version_b = f"vector-version-b-{uuid4().hex[:12]}"
+    block_a = f"vector-block-a-{uuid4().hex[:12]}"
+    block_b = f"vector-block-b-{uuid4().hex[:12]}"
+    chunk_a = f"vector-chunk-a-{uuid4().hex[:12]}"
+    chunk_b = f"vector-chunk-b-{uuid4().hex[:12]}"
+    try:
+        worker_factory = build_session_factory(worker_url, worker_engine)
+        with worker_factory() as db:
+            db.add_all(
+                [
+                    Workspace(id=workspace_a, name=workspace_a),
+                    Workspace(id=workspace_b, name=workspace_b),
+                    Source(id=source_a, workspace_id=workspace_a, name="A", source_type="txt"),
+                    Source(id=source_b, workspace_id=workspace_b, name="B", source_type="txt"),
+                ]
+            )
+            db.flush()
+            db.add_all(
+                [
+                    SourceVersion(
+                        id=version_a,
+                        workspace_id=workspace_a,
+                        source_id=source_a,
+                        version_no=1,
+                        status="ready",
+                        object_key=f"{workspace_a}/a.txt",
+                        content_hash="a" * 64,
+                        mime_type="text/plain",
+                        size_bytes=1,
+                    ),
+                    SourceVersion(
+                        id=version_b,
+                        workspace_id=workspace_b,
+                        source_id=source_b,
+                        version_no=1,
+                        status="ready",
+                        object_key=f"{workspace_b}/b.txt",
+                        content_hash="b" * 64,
+                        mime_type="text/plain",
+                        size_bytes=1,
+                    ),
+                ]
+            )
+            db.flush()
+            db.add_all(
+                [
+                    SourceBlock(
+                        id=block_a,
+                        workspace_id=workspace_a,
+                        source_version_id=version_a,
+                        block_no=0,
+                        text="alpha evidence",
+                    ),
+                    SourceBlock(
+                        id=block_b,
+                        workspace_id=workspace_b,
+                        source_version_id=version_b,
+                        block_no=0,
+                        text="beta evidence",
+                    ),
+                ]
+            )
+            db.flush()
+            db.add_all(
+                [
+                    SourceChunk(
+                        id=chunk_a,
+                        workspace_id=workspace_a,
+                        source_version_id=version_a,
+                        source_block_id=block_a,
+                        chunk_no=0,
+                        text="alpha evidence",
+                        token_terms=["alpha"],
+                        embedding_json=[1.0, 0.0],
+                    ),
+                    SourceChunk(
+                        id=chunk_b,
+                        workspace_id=workspace_b,
+                        source_version_id=version_b,
+                        source_block_id=block_b,
+                        chunk_no=0,
+                        text="beta evidence",
+                        token_terms=["beta"],
+                        embedding_json=[1.0, 0.0],
+                    ),
+                ]
+            )
+            db.commit()
+            store = PgVectorIndexStore()
+            store.upsert(
+                db,
+                workspace_id=workspace_a,
+                source_version_id=version_a,
+                source_chunk_id=chunk_a,
+                vector=[1.0, 0.0],
+            )
+            store.upsert(
+                db,
+                workspace_id=workspace_b,
+                source_version_id=version_b,
+                source_chunk_id=chunk_b,
+                vector=[1.0, 0.0],
+            )
+            db.commit()
+
+        api_factory = build_session_factory(_api_url, api_engine)
+        with api_factory() as db:
+            set_tenant_context(db, workspace_a)
+            scores = PgVectorIndexStore().search(
+                db,
+                workspace_id=workspace_a,
+                source_version_ids=[version_a, version_b],
+                vector=[1.0, 0.0],
+                limit=10,
+            )
+            assert scores == {block_a: 1.0}
+    finally:
+        with worker_engine.begin() as connection:
+            connection.execute(
+                text(
+                    "DELETE FROM source_chunk_embeddings WHERE source_chunk_id IN (:a, :b)"
+                ),
+                {"a": chunk_a, "b": chunk_b},
+            )
+            connection.execute(
+                text("DELETE FROM source_chunks WHERE id IN (:a, :b)"),
+                {"a": chunk_a, "b": chunk_b},
+            )
+            connection.execute(
+                text("DELETE FROM source_blocks WHERE id IN (:a, :b)"),
+                {"a": block_a, "b": block_b},
+            )
+            connection.execute(
+                text("DELETE FROM source_versions WHERE id IN (:a, :b)"),
+                {"a": version_a, "b": version_b},
+            )
+            connection.execute(
+                text("DELETE FROM sources WHERE id IN (:a, :b)"),
+                {"a": source_a, "b": source_b},
+            )
+            connection.execute(
+                text("DELETE FROM workspaces WHERE id IN (:a, :b)"),
+                {"a": workspace_a, "b": workspace_b},
+            )
+        api_engine.dispose()
+        worker_engine.dispose()
