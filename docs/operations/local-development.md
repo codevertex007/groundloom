@@ -20,6 +20,11 @@ backend/scripts/agent_worker.py --once.
 index and selects the pgvector derived table for PostgreSQL. The deployment-
 shaped Postgres stack requires migration 015 and an installed pgvector
 extension before source ingestion or semantic search is exercised.
+The same disposable stack is exercised in CI by running migrations with the
+dedicated migrator URL and `pytest
+backend/tests/test_postgres_deployment_integration.py`; the local-only role
+credentials in `docker/postgres-init/001-roles.sql` are never production
+secrets.
 The bundled MinIO emulator does not provide the production KMS/SSE setup, so
 deployment-shaped local tests use `GROUNDLOOM_OBJECT_STORE_SSE_MODE=none`;
 production startup rejects that mode and requires AES-256 or KMS encryption.
