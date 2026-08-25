@@ -52,6 +52,13 @@ def test_project_source_grounded_run_and_replay(tmp_path):
     )
     assert project.status_code == 201, project.text
     project_id = project.json()["id"]
+    evidence = api.get(
+        f"/v1/projects/{project_id}/sources/search?q=torque guidance",
+        headers=headers(),
+    )
+    assert evidence.status_code == 200
+    assert evidence.json()["retrieval_version"] == "hybrid.v1"
+    assert evidence.json()["passages"]
     detail = api.get(f"/v1/projects/{project_id}", headers=headers())
     assert detail.status_code == 200
     thread_id = detail.json()["thread_id"]

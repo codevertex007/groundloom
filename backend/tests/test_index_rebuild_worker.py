@@ -34,9 +34,11 @@ def test_index_rebuild_is_durable_idempotent_and_scoped(tmp_path: Path):
     ctx = RuntimeContext("local-user", "local-workspace", frozenset({"workspace_admin"}), "index-test")
     with app.state.session_factory() as db:
         before = db.query(SourceChunk).filter_by(source_version_id=version_id).count()
+        assert db.query(SourceChunk).filter_by(source_version_id=version_id).one().embedding_json
         result = run_index_rebuild_worker_once(db, ctx, "index-test-worker")
         after = db.query(SourceChunk).filter_by(source_version_id=version_id).count()
         assert before == after == 1
+        assert db.query(SourceChunk).filter_by(source_version_id=version_id).one().embedding_json
         assert result == {"claimed": 1, "completed": 1, "failed": 0}
         assert db.query(IndexRebuildJob).one().status == "completed"
         replay = run_index_rebuild_worker_once(db, ctx, "index-test-worker")

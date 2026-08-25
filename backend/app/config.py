@@ -41,6 +41,12 @@ class Settings(BaseSettings):
     local_workspace_name: str = "Local Workspace"
     model_provider: str = "local"
     model_name: str = "deterministic-local"
+    embedding_provider: str = "local"
+    embedding_model: str = "deterministic-hash-v1"
+    embedding_dimensions: int = Field(default=32, ge=4, le=4096)
+    embedding_api_key: str | None = None
+    embedding_base_url: str | None = None
+    embedding_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
     telemetry_provider: str = "local"
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
@@ -143,6 +149,9 @@ class Settings(BaseSettings):
             "object_store_read_timeout_seconds": self.object_store_read_timeout_seconds,
             "model_provider": self.model_provider,
             "model_name": self.model_name,
+            "embedding_provider": self.embedding_provider,
+            "embedding_model": self.embedding_model,
+            "embedding_dimensions": self.embedding_dimensions,
             "telemetry_provider": self.telemetry_provider,
             "agent_inline_local": self.agent_inline_local,
             "agent_max_attempts": self.agent_max_attempts,

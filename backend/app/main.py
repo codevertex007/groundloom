@@ -618,10 +618,11 @@ def register_routes(app: FastAPI) -> FastAPI:
     def source_search(
         project_id: str,
         q: str,
+        request: Request,
         db: Session = Depends(get_db),
         ctx: RuntimeContext = Depends(get_ctx),
     ):
-        return search_evidence(db, ctx, project_id, q)
+        return search_evidence(db, ctx, project_id, q, settings=request.app.state.settings)
 
     @app.get("/v1/skills")
     def skills_get(db: Session = Depends(get_db), ctx: RuntimeContext = Depends(get_ctx)):

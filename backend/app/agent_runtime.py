@@ -91,7 +91,9 @@ class DeepAgentsAgentRuntime(AgentRuntime):
 
         def search_source_passages(query: str) -> dict[str, Any]:
             """Search only the source versions pinned to this project."""
-            return search_evidence(db, ctx, project_id, query, limit=8).model_dump()
+            return search_evidence(
+                db, ctx, project_id, query, limit=8, settings=self.settings
+            ).model_dump()
 
         def read_source_passage(source_version_id: str, passage_id: str) -> dict[str, Any]:
             """Read one immutable passage after enforcing project source scope."""

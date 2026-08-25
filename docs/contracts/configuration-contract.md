@@ -14,6 +14,11 @@ telemetry. Deployment settings select `checkpoint_backend=postgres`,
 Optional dependency groups are `agent`, `storage`, and `observability`.
 Provider calls use at most `agent_max_attempts` (default 3) with bounded
 exponential backoff; cancellation is checked before each retry.
+Embedding calls use the configured `embedding_provider`, model, fixed vector
+dimension, endpoint, and timeout. `local` uses deterministic hashing for
+credential-free development. `openai`/`openai-compatible` uses a narrow
+OpenAI-compatible `/embeddings` adapter and requires an API key; provider
+outages and malformed dimensions become typed redacted dependency errors.
 S3-compatible storage calls use `object_store_max_attempts` (default 3) with
 `object_store_connect_timeout_seconds` (default 5) and
 `object_store_read_timeout_seconds` (default 30). Storage SDK failures are

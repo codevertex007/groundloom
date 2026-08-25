@@ -58,6 +58,7 @@ from .models import (
     utcnow,
 )
 from .object_store import build_object_store
+from .retrieval import build_embedding_provider, cosine_similarity, hybrid_score
 from .schemas import (
     DecisionIn,
     EvidenceBundle,
@@ -885,7 +886,12 @@ def _selected_versions(db: Session, run: AgentRun) -> list[str]:
 
 
 def search_evidence(
-    db: Session, ctx: RuntimeContext, project_id: str, query: str, limit: int = 8
+    db: Session,
+    ctx: RuntimeContext,
+    project_id: str,
+    query: str,
+    limit: int = 8,
+    settings: Settings | None = None,
 ) -> EvidenceBundle:
     project = _project(db, ctx, project_id)
     config = db.get(ProjectConfigVersion, project.current_config_version_id)
@@ -893,7 +899,7 @@ def search_evidence(
     if not allowed:
         return EvidenceBundle(
             query=query,
-            retrieval_version="lexical.v1",
+            retrieval_version="hybrid.v1",
             passages=[],
             gaps=["No selected source versions are available."],
         )
@@ -907,11 +913,25 @@ def search_evidence(
         )
         .all()
     )
+    chunk_vectors = {
+        chunk.source_block_id: chunk.embedding_json
+        for chunk in db.query(SourceChunk)
+        .filter(
+            SourceChunk.workspace_id == ctx.workspace_id,
+            SourceChunk.source_version_id.in_(allowed),
+        )
+        .all()
+    }
+    query_vector = build_embedding_provider(settings).embed([query])[0]
     ranked: list[tuple[float, SourceBlock, Source]] = []
     for block, source in blocks:
         text = block.text.lower()
-        score = sum(1 for term in terms if term in text) / max(len(terms), 1)
-        if score > 0:
+        lexical_score = sum(1 for term in terms if term in text) / max(len(terms), 1)
+        block_vector = chunk_vectors.get(block.id)
+        raw_semantic_score = cosine_similarity(query_vector, block_vector) if block_vector else 0.0
+        semantic_score = max(0.0, raw_semantic_score)
+        score = hybrid_score(lexical_score, semantic_score)
+        if score > 0 and (lexical_score > 0 or raw_semantic_score >= 0.25):
             ranked.append((score, block, source))
     ranked.sort(key=lambda item: (-item[0], item[1].block_no))
     passages: list[PassageOut] = []
@@ -932,7 +952,7 @@ def search_evidence(
         )
     return EvidenceBundle(
         query=query,
-        retrieval_version="lexical.v1",
+        retrieval_version="hybrid.v1",
         passages=passages,
         gaps=[] if passages else ["No selected passage matched the request."],
     )
@@ -1144,7 +1164,9 @@ def execute_agent_turn(
         checkpoint_local_run(settings, ctx, run, "completed", {"initialization": True})
         return
     add_todo(db, ctx, run, "Understand the request and inspect project state", "completed", 0)
-    evidence = search_evidence(db, ctx, project.id, run.request_text, limit=8)
+    evidence = search_evidence(
+        db, ctx, project.id, run.request_text, limit=8, settings=settings
+    )
     passage_dicts = [passage.model_dump() for passage in evidence.passages]
     append_event(
         db,
@@ -1393,7 +1415,9 @@ def _complete_approved_plan(
 ) -> None:
     """Continue the same local primary-agent run after a plan approval interrupt."""
     project = _project(db, ctx, run.project_id)
-    evidence = search_evidence(db, ctx, project.id, run.request_text, limit=8)
+    evidence = search_evidence(
+        db, ctx, project.id, run.request_text, limit=8, settings=settings
+    )
     passage_dicts = [passage.model_dump() for passage in evidence.passages]
     current = db.get(ContentVersion, project.current_content_version_id)
     if current is None:
@@ -1805,9 +1829,13 @@ def process_ingestion_job(
     append_source_stage(db, ctx, version, "normalizing")
     existing = db.query(SourceBlock).filter_by(source_version_id=version.id).count()
     if not existing:
-        for index, paragraph in enumerate(
-            [p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()] or [text.strip()]
-        ):
+        paragraphs = [
+            p.strip() for p in re.split(r"\n\s*\n", text) if p.strip()
+        ] or [text.strip()]
+        embeddings = build_embedding_provider(settings).embed(
+            [paragraph[:5000] for paragraph in paragraphs]
+        )
+        for index, paragraph in enumerate(paragraphs):
             signals = (
                 ["possible_instruction_text"]
                 if re.search(r"ignore (previous|all) instructions|system prompt", paragraph, re.I)
@@ -1835,6 +1863,7 @@ def process_ingestion_job(
                     chunk_no=0,
                     text=paragraph[:5000],
                     token_terms=terms,
+                    embedding_json=embeddings[index],
                 )
             )
     version.status = "indexing"
@@ -2000,7 +2029,10 @@ def claim_index_rebuild_jobs(
 
 
 def process_index_rebuild_job(
-    db: Session, ctx: RuntimeContext, job: IndexRebuildJob
+    db: Session,
+    ctx: RuntimeContext,
+    job: IndexRebuildJob,
+    settings: Settings | None = None,
 ) -> IndexRebuildJob:
     if job.workspace_id != ctx.workspace_id:
         raise GroundloomError("FORBIDDEN", "The index job is outside the workspace scope.", 403)
@@ -2020,7 +2052,8 @@ def process_index_rebuild_job(
     db.query(SourceChunk).filter_by(
         source_version_id=version.id, workspace_id=ctx.workspace_id
     ).delete(synchronize_session=False)
-    for block in blocks:
+    embeddings = build_embedding_provider(settings).embed([block.text[:5000] for block in blocks])
+    for index, block in enumerate(blocks):
         terms = sorted(set(re.findall(r"[a-z0-9]{3,}", block.text.lower())))
         db.add(
             SourceChunk(
@@ -2031,7 +2064,7 @@ def process_index_rebuild_job(
                 chunk_no=0,
                 text=block.text[:5000],
                 token_terms=terms,
-                embedding_json=None,
+                embedding_json=embeddings[index],
             )
         )
     job.status = "completed"
@@ -2052,7 +2085,12 @@ def process_index_rebuild_job(
 
 
 def run_index_rebuild_worker_once(
-    db: Session, ctx: RuntimeContext, worker_id: str, *, limit: int = 10
+    db: Session,
+    ctx: RuntimeContext,
+    worker_id: str,
+    *,
+    limit: int = 10,
+    settings: Settings | None = None,
 ) -> dict[str, int]:
     set_tenant_context(db, ctx.workspace_id)
     touch_worker_heartbeat(db, worker_id, "index", ctx.workspace_id, details={"limit": limit})
@@ -2061,7 +2099,7 @@ def run_index_rebuild_worker_once(
     completed = failed = 0
     for job in claimed:
         try:
-            process_index_rebuild_job(db, ctx, job)
+            process_index_rebuild_job(db, ctx, job, settings)
             completed += 1
         except Exception as exc:
             db.rollback()

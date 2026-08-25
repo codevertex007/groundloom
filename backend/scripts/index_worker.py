@@ -16,7 +16,7 @@ def main() -> None:
         "corr-index-worker",
     )
     with factory() as db:
-        print(run_index_rebuild_worker_once(db, ctx, "index-worker", limit=25))
+        print(run_index_rebuild_worker_once(db, ctx, "index-worker", limit=25, settings=settings))
     engine.dispose(close=True)
 
 
