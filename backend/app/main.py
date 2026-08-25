@@ -29,6 +29,7 @@ from .object_store import build_object_store
 from .schemas import (
     ApprovalDecision,
     ApprovalOut,
+    AuditEventPage,
     DecisionIn,
     DeletionRequestCreate,
     DeletionRequestOut,
@@ -76,6 +77,7 @@ from .services import (
     fork_skill,
     get_retention_policy,
     get_workspace_preferences,
+    list_audit_events,
     list_project_page,
     list_run_approvals,
     list_skills,
@@ -258,6 +260,17 @@ def register_routes(app: FastAPI) -> FastAPI:
             .order_by(Project.updated_at.desc())
             .all()
         ]
+
+    @app.get("/v1/audit-events", response_model=AuditEventPage)
+    def audit_events(
+        limit: int = Query(default=50, ge=1, le=100),
+        cursor: str | None = Query(default=None, max_length=300),
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+    ):
+        page = list_audit_events(db, ctx, limit=limit, cursor=cursor)
+        db.commit()
+        return page
 
     @app.get("/v1/projects/page", response_model=ProjectPage)
     def projects_page(

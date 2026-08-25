@@ -36,6 +36,23 @@ class ReadinessResponse(HealthResponse):
     pass
 
 
+class AuditEventOut(ProductModel):
+    id: str
+    actor_id: str
+    action: str
+    target_type: str
+    target_id: str | None = None
+    result: str
+    correlation_id: str
+    summary: str
+    created_at: datetime
+
+
+class AuditEventPage(BaseModel):
+    items: list[AuditEventOut]
+    next_cursor: str | None = None
+
+
 class ProjectCreate(BaseModel):
     name: str = Field(min_length=1, max_length=200)
     project_type: str = Field(default="knowledge_brief", min_length=1, max_length=80)

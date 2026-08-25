@@ -11,7 +11,7 @@ This is the initial planned matrix. Codex must replace planned identifiers with 
 | `FR-CONTENT-001..005` | `backend/tests/test_api_vertical_slice.py::test_patch_reject_and_accept_exactly_once`; immutable content version and exact-once decision |
 | `FR-QUALITY-001` | `backend/app/services.py::validate_content`; `/v1/projects/{id}/validate` contract; browser `Review` → `Validation checklist` assertion |
 | `FR-EXPORT-001` | `backend/tests/test_api_vertical_slice.py::test_skill_publish_validation_and_export`; deterministic PDF bytes and scoped download |
-| `FR-AUDIT-001` | `backend/app/services.py::audit`; provenance on run/content/export mutations |
+| `FR-AUDIT-001` | `backend/app/services.py::audit`; `backend/tests/test_audit_api.py::test_audit_api_is_admin_only_bounded_and_cursor_paginated`; safe admin-only audit projection, cursor traversal, invalid-cursor handling, read auditing, and provenance on run/content/export mutations |
 | `UI-STATE-001..002` | Browser smoke of project empty/loading/canvas states and cursor load-more contract; `frontend/src/ui-contract.test.js` rejects native alert dialogs and asserts typed permission/retryable/terminal notices; React API error banner and reload-backed state |
 | `UI-RUN-001..002` | Browser smoke durable activity panel and rendered run status; `/v1/threads/{id}/events` replay DTO, `/events/stream` SSE smoke, and connected `/v1/runs/{id}/cancel`/`resume` controls |
 | `UI-PATCH-001..002` | Browser smoke proposal review plus `frontend/e2e/groundloom.spec.js` rejection path; `test_patch_reject_and_accept_exactly_once` |

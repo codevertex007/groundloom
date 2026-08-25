@@ -7,6 +7,7 @@ Core resources:
 ```text
 POST/GET /projects                         GET /projects/{id}
 GET      /projects/page?limit=&cursor=     (bounded keyset page)
+GET      /audit-events?limit=&cursor=      (admin-only bounded audit page)
 POST     /projects/{id}/threads/messages  GET /threads/{id}/events
 GET      /threads/{id}/events/stream      POST /sources/{id}/versions
 POST     /runs/{id}/cancel                POST /runs/{id}/resume
@@ -67,3 +68,10 @@ Transactional outbox rows are not public REST resources. The configured
 `outbox_worker.py` publishes their normalized envelopes to the deployment sink
 with at-least-once delivery; each envelope carries its stable outbox ID for
 consumer deduplication. The disabled local sink is never reported as success.
+
+`GET /audit-events` is restricted to `workspace_admin` and
+`organization_admin` memberships. It returns only the append-only event's safe
+actor/action/target/result/correlation/summary/timestamp fields and uses an
+opaque keyset cursor bounded to 1..100 items. Reading the stream appends an
+`audit.read` event after the page is materialized; audit records never expose
+raw payloads, prompts, source text, credentials, or provider responses.
