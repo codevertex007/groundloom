@@ -339,6 +339,12 @@ def test_local_restore_validates_before_overwriting_and_rejects_extra_objects(tm
     assert target_database.read_bytes() == b"existing target"
     assert (target_objects / "existing.txt").read_bytes() == b"preserve on failed restore"
 
+    (backup_objects / "unexpected.bin").unlink()
+    restore_backup(target_database, target_objects, backup)
+    assert target_database.read_bytes() == b"good database"
+    assert (target_objects / "artifact.bin").read_bytes() == b"good artifact"
+    assert not (target_objects / "existing.txt").exists()
+
 
 def test_agent_worker_claims_queued_runs_and_preserves_inline_local_mode(tmp_path: Path):
     settings = Settings(

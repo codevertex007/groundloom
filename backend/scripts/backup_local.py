@@ -3,7 +3,9 @@
 import argparse
 import hashlib
 import json
+import os
 import shutil
+import tempfile
 from pathlib import Path
 
 
@@ -73,9 +75,40 @@ def restore_backup(database: Path, objects: Path, destination: Path) -> None:
     # must not replace a usable target with a corrupt or incomplete copy.
     verify_manifest(db_source, objects_source, manifest)
     database.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copy2(db_source, database)
-    copy_tree(objects_source, objects)
-    verify_manifest(database, objects, manifest)
+    objects.parent.mkdir(parents=True, exist_ok=True)
+    staging_root = Path(tempfile.mkdtemp(prefix=".groundloom-restore-", dir=objects.parent))
+    staged_database = staging_root / "groundloom.db"
+    staged_objects = staging_root / "objects"
+    old_database = staging_root / "old-groundloom.db"
+    old_objects = staging_root / "old-objects"
+    database_was_present = database.exists()
+    objects_were_present = objects.exists()
+    try:
+        shutil.copy2(db_source, staged_database)
+        copy_tree(objects_source, staged_objects)
+        verify_manifest(staged_database, staged_objects, manifest)
+        if database_was_present:
+            os.replace(database, old_database)
+        if objects_were_present:
+            os.replace(objects, old_objects)
+        try:
+            os.replace(staged_database, database)
+            os.replace(staged_objects, objects)
+        except Exception:
+            database.unlink(missing_ok=True)
+            if objects.exists():
+                shutil.rmtree(objects)
+            if database_was_present:
+                os.replace(old_database, database)
+            if objects_were_present:
+                os.replace(old_objects, objects)
+            raise
+        if old_database.exists():
+            old_database.unlink()
+        if old_objects.exists():
+            shutil.rmtree(old_objects)
+    finally:
+        shutil.rmtree(staging_root, ignore_errors=True)
 
 
 def main() -> None:
