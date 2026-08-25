@@ -397,6 +397,40 @@ button {
   gap: 8px;
   margin: 10px 0 18px;
 }
+.validation-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  border: 1px solid var(--border);
+  background: var(--panel-2);
+  border-radius: 5px;
+  margin-bottom: 14px;
+}
+.validation-summary span {
+  color: var(--muted);
+  font-size: 11px;
+  margin-left: auto;
+}
+.validation-findings {
+  display: grid;
+  gap: 8px;
+  max-height: 260px;
+  overflow: auto;
+}
+.finding-row {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  padding: 10px;
+  border: 1px solid var(--border);
+  border-radius: 5px;
+}
+.finding-row p {
+  margin: 3px 0 0;
+  color: var(--muted);
+  font-size: 11px;
+}
 .source-name {
   display: flex;
   align-items: center;

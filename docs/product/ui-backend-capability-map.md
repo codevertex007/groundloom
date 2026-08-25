@@ -23,6 +23,7 @@
 | Canvas | `GET /v1/projects/{id}`, `/outline`, `/content`, `/patches`, `/threads/{thread_id}/events` |
 | Copilot | `POST /v1/projects/{id}/threads/messages`, `POST /v1/runs/{id}/cancel`, `POST /v1/runs/{id}/resume` |
 | Evidence search | `GET /v1/projects/{id}/sources/search?q=...` |
+| Review/validation | `POST /v1/projects/{project_id}/validate` |
 | Diff review | `POST /v1/patches/{id}/accept`, `POST /v1/patches/{id}/reject` |
 | Export | `POST /v1/exports`, `GET /v1/exports/{id}`, scoped download URL |
 

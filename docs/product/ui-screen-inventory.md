@@ -39,12 +39,12 @@ The archive contains one Design Canvas export, `Knowledge Platform.dc.html`, wit
 | `/sources` | Searchable source library, file-type badges, source rows and processing/version status | `SourcesScreen`, upload/finalize against `POST /v1/sources/uploads`, immutable version-history modal, and source-version upload against `POST /v1/sources/{source_id}/versions` |
 | `/skills` | Starter/organization/workspace skill cards and filters, package descriptions, version detail, create/fork menu, AI-author affordance, validation/repair/publication controls | `SkillsScreen`, scoped list/filter plus AI-draft/fork/validate/repair/publish API path, immutable version history, scoped package metadata |
 | `/projects/new` | Project type, brief, source selection, active published-skill selection, validation before create | `NewProjectModal`, real project command with selected ready source and published skill versions |
-| `/projects/:id/canvas` | Three-column canvas: source/search rail, outline/content tabs, persistent Copilot panel, activity/todos, citation and proposal review | `Canvas`, durable event replay, typed content/outline DTOs, authorized immutable-passage citation lookup, accept/reject diff |
-| Canvas overlays | Citation context, proposed diff, accept/reject, loading and unavailable states | `CitationPanel`, `DiffCard`, deterministic patch endpoints |
+| `/projects/:id/canvas` | Three-column canvas: source/search rail, outline/content tabs, persistent Copilot panel, activity/todos, citation and proposal review | `Canvas`, durable event replay, typed content/outline DTOs, authorized immutable-passage citation lookup, deterministic validation checklist/findings, accept/reject diff |
+| Canvas overlays | Citation context, proposed diff, deterministic review checklist, accept/reject, loading, permission, retryable, and unavailable states | `CitationPanel`, `ValidationPanel`, `DiffCard`, `ErrorNotice`, deterministic validation/patch endpoints |
 | `/export` and Settings | Export/preview action, review preferences, default format, keyboard command palette | Export action, `SettingsModal`, `CommandPalette` (`⌘K`/`Ctrl+K`) |
 
 The reference also uses visible keyboard focus, compact monospace metadata labels, keyboard-dismissable overlays, and responsive collapse of the rail/Copilot. Those behaviors are retained in the React client.
 
 ## Implementation evidence
 
-For each route, capture component tests and one e2e happy path plus permission, failure, reconnect, and empty-state coverage. Visual parity should be reviewed against extracted reference screens, but product-contract correctness takes priority over pixel imitation when the archive is ambiguous.
+For each route, capture component tests and one e2e happy path plus permission, failure, reconnect, and empty-state coverage. API failures render typed in-app notices with retry or dismissal actions; native browser alert dialogs are not used. Visual parity should be reviewed against extracted reference screens, but product-contract correctness takes priority over pixel imitation when the archive is ambiguous.

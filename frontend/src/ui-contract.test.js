@@ -16,6 +16,7 @@ test("reference surfaces and connected mutations are present in the UI", () => {
     "SkillsScreen",
     "Canvas",
     "CitationPanel",
+    "ValidationPanel",
     "DiffCard",
     "SettingsModal",
     "CommandPalette",
@@ -39,9 +40,11 @@ test("reference surfaces and connected mutations are present in the UI", () => {
     "skill_version_ids",
     "/v1/skills/",
     "/v1/source-versions/",
+    "/v1/projects/",
+    "Validation checklist",
     "source-row-actions",
     "Versions",
-    "source_id",
+    "sourceId",
     "Fork to workspace",
     "Cancel run",
     "Resume run",
@@ -52,6 +55,7 @@ test("reference surfaces and connected mutations are present in the UI", () => {
 });
 
 test("interactive reference states expose keyboard and assistive semantics", () => {
+  assert.doesNotMatch(source, /\balert\(/);
   assert.match(source, /role="dialog"\s+aria-modal="true"/);
   assert.match(source, /role="alert"/);
   assert.match(source, /data-error-kind=\{classifyError\(error\)\}/);

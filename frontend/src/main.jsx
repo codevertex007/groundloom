@@ -482,6 +482,7 @@ function SourcesScreen({ sources, query, setQuery, onRefresh }) {
 }
 
 function UploadButton({ onUploaded, sourceId = null }) {
+  const [error, setError] = useState(null);
   const upload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -499,16 +500,19 @@ function UploadButton({ onUploaded, sourceId = null }) {
         });
         onUploaded();
       } catch (err) {
-        alert(err.message);
+        setError(err);
       }
     };
     reader.readAsDataURL(file);
   };
   return (
-    <label className="primary-button upload-button">
-      <Upload size={15} /> Upload source
-      <input type="file" accept=".txt,.md,.pdf,.docx" onChange={upload} />
-    </label>
+    <>
+      <label className="primary-button upload-button">
+        <Upload size={15} /> Upload source
+        <input type="file" accept=".txt,.md,.pdf,.docx" onChange={upload} />
+      </label>
+      {error && <ErrorNotice error={error} onDismiss={() => setError(null)} />}
+    </>
   );
 }
 
@@ -915,12 +919,15 @@ function Canvas({ project, sources, onBack, onRefresh }) {
   const [message, setMessage] = useState("");
   const [busy, setBusy] = useState(false);
   const [citation, setCitation] = useState(null);
+  const [validation, setValidation] = useState(null);
+  const [validationOpen, setValidationOpen] = useState(false);
   const [rail, setRail] = useState("sources");
   const [query, setQuery] = useState("");
   const [evidence, setEvidence] = useState(null);
   const [connection, setConnection] = useState("connecting");
   const [approvals, setApprovals] = useState([]);
   const [run, setRun] = useState(null);
+  const [operationError, setOperationError] = useState(null);
   const loadApprovals = async (runId = run?.id || project.current_run_id) => {
     if (!runId) {
       setApprovals([]);
@@ -949,7 +956,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
     await loadApprovals(runId);
   };
   useEffect(() => {
-    load().catch((e) => alert(e.message));
+    load().catch((e) => setOperationError(e));
     const stop = subscribeToEvents(
       `/v1/threads/${project.thread_id}/events/stream`,
       (event) => {
@@ -965,7 +972,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
           event.type === "approval.required" ||
           event.type === "approval.resolved"
         ) {
-          load().catch(() => {});
+          load().catch((e) => setOperationError(e));
           loadApprovals().catch(() => {});
         }
       },
@@ -988,7 +995,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
       await loadApprovals(nextRun.id);
       onRefresh();
     } catch (e) {
-      alert(e.message);
+      setOperationError(e);
     } finally {
       setBusy(false);
     }
@@ -999,7 +1006,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
       setRun(await api(`/v1/runs/${run.id}/cancel`, { method: "POST" }));
       await load();
     } catch (e) {
-      alert(e.message);
+      setOperationError(e);
     }
   };
   const resume = async () => {
@@ -1008,7 +1015,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
       setRun(await api(`/v1/runs/${run.id}/resume`, { method: "POST" }));
       await load();
     } catch (e) {
-      alert(e.message);
+      setOperationError(e);
     }
   };
   const accept = async (patch) => {
@@ -1021,7 +1028,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
       });
       await load();
     } catch (e) {
-      alert(e.message);
+      setOperationError(e);
     }
   };
   const resolveApproval = async (approval, decision) => {
@@ -1034,7 +1041,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
       await loadApprovals(approval.run_id);
       onRefresh();
     } catch (e) {
-      alert(e.message);
+      setOperationError(e);
     }
   };
   const reject = async (patch) => {
@@ -1048,7 +1055,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
       });
       await load();
     } catch (e) {
-      alert(e.message);
+      setOperationError(e);
     }
   };
   const search = async () => {
@@ -1060,7 +1067,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
         ),
       );
     } catch (e) {
-      alert(e.message);
+      setOperationError(e);
     }
   };
   const openCitation = async (passageId) => {
@@ -1075,7 +1082,20 @@ function Canvas({ project, sources, onBack, onRefresh }) {
         // try the other authorized pinned versions without broadening scope.
       }
     }
-    setMessage("This citation is no longer available in the project's pinned evidence.");
+    setOperationError({
+      message: "This citation is no longer available in the project's pinned evidence.",
+      code: "CITATION_NOT_FOUND",
+    });
+  };
+  const runValidation = async () => {
+    try {
+      setValidation(
+        await api(`/v1/projects/${project.id}/validate`, { method: "POST" }),
+      );
+      setValidationOpen(true);
+    } catch (e) {
+      setOperationError(e);
+    }
   };
   const lastActivity = [...events]
     .reverse()
@@ -1112,6 +1132,9 @@ function Canvas({ project, sources, onBack, onRefresh }) {
           >
             <RefreshCw size={14} />
           </button>
+          <button className="soft-button" onClick={runValidation}>
+            <ShieldCheck size={14} /> Review
+          </button>
           <button
             className="primary-button"
             onClick={() =>
@@ -1124,13 +1147,23 @@ function Canvas({ project, sources, onBack, onRefresh }) {
                 }),
               })
                 .then((j) => window.open(j.download_url, "_blank"))
-                .catch((e) => alert(e.message))
+                .catch((e) => setOperationError(e))
             }
           >
             <Download size={14} /> Export
           </button>
         </div>
       </div>
+      {operationError && (
+        <ErrorNotice
+          error={operationError}
+          onRetry={() => {
+            setOperationError(null);
+            load().catch((e) => setOperationError(e));
+          }}
+          onDismiss={() => setOperationError(null)}
+        />
+      )}
       <div className="canvas-body">
         <aside className="canvas-rail">
           <div className="rail-tabs">
@@ -1348,6 +1381,9 @@ function Canvas({ project, sources, onBack, onRefresh }) {
       {citation && (
         <CitationPanel citation={citation} onClose={() => setCitation(null)} />
       )}
+      {validationOpen && validation && (
+        <ValidationPanel validation={validation} onClose={() => setValidationOpen(false)} />
+      )}
     </section>
   );
 }
@@ -1412,6 +1448,81 @@ function ContentView({ content, onCitation }) {
           title="Content is empty"
           body="Approve an outline or ask Copilot for a reviewable draft."
         />
+      )}
+    </div>
+  );
+}
+
+function ValidationPanel({ validation, onClose }) {
+  const summary = validation.summary || {};
+  return (
+    <div className="modal-backdrop">
+      <div className="modal wide" role="dialog" aria-modal="true" aria-labelledby="validation-title">
+        <div className="modal-head">
+          <div>
+            <span className="eyebrow">QUALITY / REVIEW</span>
+            <h2 id="validation-title">Validation checklist</h2>
+          </div>
+          <button className="icon-button" aria-label="Close validation dialog" onClick={onClose}>
+            <X size={17} />
+          </button>
+        </div>
+        <div className="validation-summary" role="status">
+          <ShieldCheck size={18} />
+          <strong>{validation.status === "passed" ? "Ready for review" : "Needs revision"}</strong>
+          <span>
+            {summary.finding_count || 0} findings · {summary.error_count || 0} errors · {summary.warning_count || 0} warnings
+          </span>
+        </div>
+        {validation.findings?.length ? (
+          <div className="validation-findings">
+            {validation.findings.map((finding) => (
+              <div className={`finding-row ${finding.severity}`} key={finding.id}>
+                <span className="status-pill">{finding.severity}</span>
+                <div>
+                  <strong>{finding.category}</strong>
+                  <p>{finding.message}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <EmptyState
+            icon={Check}
+            title="All deterministic checks passed"
+            body="Structure and citation checks found no actionable findings for this immutable content version."
+          />
+        )}
+        <div className="modal-actions">
+          <button className="primary-button" onClick={onClose}>Done</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ErrorNotice({ error, onRetry, onDismiss }) {
+  const normalized = typeof error === "string" ? { message: error } : error;
+  const kind = classifyError(normalized);
+  return (
+    <div className="error-banner" data-error-kind={kind} role="alert">
+      <CircleHelp size={15} />
+      <span>
+        <strong>
+          {kind === "permission"
+            ? "Permission denied"
+            : kind === "retryable"
+              ? "Temporary service issue"
+              : "Request failed"}
+        </strong>{" "}
+        {normalized?.message || "The request could not be completed."}
+      </span>
+      {kind === "retryable" && onRetry ? (
+        <button onClick={onRetry}>
+          <RefreshCw size={14} /> Retry
+        </button>
+      ) : (
+        <button onClick={onDismiss}>Dismiss</button>
       )}
     </div>
   );
@@ -1487,6 +1598,7 @@ function NewProjectModal({ sources, skills, onClose, onCreated }) {
     skill_version_ids: [],
   });
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
   const submit = async () => {
     setBusy(true);
     try {
@@ -1496,7 +1608,7 @@ function NewProjectModal({ sources, skills, onClose, onCreated }) {
       });
       onCreated(project);
     } catch (e) {
-      alert(e.message);
+      setError(e);
     } finally {
       setBusy(false);
     }
@@ -1522,6 +1634,7 @@ function NewProjectModal({ sources, skills, onClose, onCreated }) {
             <X size={17} />
           </button>
         </div>
+        {error && <ErrorNotice error={error} onDismiss={() => setError(null)} />}
         <label>
           Project name
           <input
@@ -1676,6 +1789,7 @@ function SettingsModal({ onClose }) {
   const [prefs, setPrefs] = useState(null);
   const [draft, setDraft] = useState(empty);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState(null);
   useEffect(() => {
     let live = true;
     api("/v1/workspace/preferences")
@@ -1694,8 +1808,7 @@ function SettingsModal({ onClose }) {
       })
       .catch((e) => {
         if (live) {
-          alert(e.message);
-          onClose();
+          setError(e);
         }
       });
     return () => {
@@ -1713,7 +1826,7 @@ function SettingsModal({ onClose }) {
       });
       onClose();
     } catch (e) {
-      alert(e.message);
+      setError(e);
     } finally {
       setBusy(false);
     }
@@ -1744,6 +1857,7 @@ function SettingsModal({ onClose }) {
             <X size={17} />
           </button>
         </div>
+        {error && <ErrorNotice error={error} onDismiss={() => setError(null)} />}
         {!prefs ? (
           <div role="status" className="loading-settings">
             Loading workspace preferences…
