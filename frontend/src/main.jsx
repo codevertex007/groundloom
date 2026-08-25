@@ -12,14 +12,12 @@ import {
   Command,
   Download,
   FileText,
-  Filter,
   FolderOpen,
   Gauge,
   GripVertical,
   Library,
   LoaderCircle,
   Menu,
-  MoreHorizontal,
   PanelLeft,
   Plus,
   RefreshCw,
@@ -306,14 +304,15 @@ function ProjectsScreen({
         .includes(query.toLowerCase()) &&
       (status === "all" || p.status === status),
   );
-  const cycleStatus = () =>
-    setStatus(
-      (current) => statuses[(statuses.indexOf(current) + 1) % statuses.length],
-    );
+  const statusCounts = Object.fromEntries(
+    statuses.map((value) => [
+      value,
+      value === "all" ? projects.length : projects.filter((p) => p.status === value).length,
+    ]),
+  );
   return (
     <section className="page">
       <PageHeader
-        eyebrow="WORKSPACE / PROJECTS"
         title="Projects"
         meta={`${projects.length} total · ${projects.reduce((n, p) => n + p.source_count, 0)} sources`}
         action={
@@ -322,7 +321,7 @@ function ProjectsScreen({
           </button>
         }
       />
-      <div className="toolbar">
+      <div className="toolbar projects-toolbar">
         <div className="search-box">
           <Search size={15} />
           <input
@@ -332,15 +331,19 @@ function ProjectsScreen({
             placeholder="Search projects…"
           />
         </div>
-        <button
-          className="soft-button"
-          aria-label={`Filter projects, currently ${status}`}
-          aria-pressed={status !== "all"}
-          onClick={cycleStatus}
-        >
-          <Filter size={14} /> {status === "all" ? "Filter" : status}{" "}
-          <ChevronDown size={13} />
-        </button>
+        <div className="project-filters" role="group" aria-label="Filter projects">
+          {statuses.map((value) => (
+            <button
+              key={value}
+              className={`filter-button ${status === value ? "selected" : ""}`}
+              aria-pressed={status === value}
+              onClick={() => setStatus(value)}
+            >
+              {value[0].toUpperCase() + value.slice(1)}
+              <span>{statusCounts[value]}</span>
+            </button>
+          ))}
+        </div>
       </div>
       {loading ? (
         <LoadingRows />
@@ -349,10 +352,14 @@ function ProjectsScreen({
           icon={Search}
           title={
             query || status !== "all"
-              ? "No matching projects"
+              ? "Nothing matches that filter"
               : "Your studio is empty"
           }
-          body="Start with a brief, selected evidence, and a persistent collaborator."
+          body={
+            query || status !== "all"
+              ? "Try a different status, clear the search, or start something new from your sources."
+              : "Start with a brief, selected evidence, and a persistent collaborator."
+          }
           action={
             <button className="primary-button" onClick={onNew}>
               <Plus size={15} /> New Project
@@ -368,25 +375,26 @@ function ProjectsScreen({
               onClick={() => onOpen(p)}
             >
               <div className="card-top">
-                <div className="project-icon">
-                  <BookOpen size={18} />
-                </div>
-                <span className={`status-dot ${p.status}`}>{p.status}</span>
-                <MoreHorizontal size={17} className="muted" />
+                <span className="project-type-label">
+                  <span className="project-type-dot" />
+                  {p.project_type || "PROJECT"}
+                </span>
+                <span className="card-date">{fmt(p.updated_at)}</span>
               </div>
               <h2>{p.name}</h2>
-              <p>{p.brief}</p>
+              <div className="project-status-row">
+                <span className={`status-dot ${p.status}`}>{p.status}</span>
+                <div className="progress-line">
+                  <span
+                    style={{
+                      width: p.latest_run_status === "completed" ? "100%" : "28%",
+                    }}
+                  />
+                </div>
+              </div>
               <div className="card-footer">
                 <span>{p.source_count} sources</span>
                 <span>{p.section_count} sections</span>
-                <span className="card-date">{fmt(p.updated_at)}</span>
-              </div>
-              <div className="progress-line">
-                <span
-                  style={{
-                    width: p.latest_run_status === "completed" ? "100%" : "28%",
-                  }}
-                />
               </div>
             </button>
           ))}
@@ -417,7 +425,7 @@ function SourcesScreen({ sources, query, setQuery, onRefresh }) {
         meta={`${sources.length} indexed`}
         action={<UploadButton onUploaded={onRefresh} />}
       />
-      <div className="toolbar">
+      <div className="toolbar sources-toolbar">
         <div className="search-box">
           <Search size={15} />
           <input

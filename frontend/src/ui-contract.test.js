@@ -83,7 +83,7 @@ test("interactive reference states expose keyboard and assistive semantics", () 
   assert.match(source, /aria-label="Send message"/);
   assert.match(source, /aria-expanded=\{open === skill\.id\}/);
   assert.match(source, /event\.key === "Enter" \|\| event\.key === " "/);
-  assert.match(source, /aria-pressed=\{status !== "all"\}/);
+  assert.match(source, /aria-pressed=\{status === value\}/);
   assert.match(source, /Filter skills by scope/);
 });
 
@@ -91,9 +91,13 @@ test("reference shell keeps branding compact and prevents narrow viewport overfl
   assert.match(source, /className="brand-copy"/);
   assert.match(source, /className="brand-subtitle"/);
   assert.match(source, /className="nav-label"/);
+  assert.match(uiSource, /className="page-header-title"/);
+  assert.match(source, /className="project-filters"/);
+  assert.match(source, /filter-button/);
   assert.match(styles, /--panel: #121518/);
   assert.match(styles, /\.main-shell[\s\S]*overflow-x: hidden/);
   assert.match(styles, /\.sidebar \.brand-copy[\s\S]*display: none/);
   assert.match(styles, /\.toolbar \.search-box[\s\S]*flex: 1 1 100%/);
   assert.match(styles, /\.project-grid[\s\S]*grid-template-columns: 1fr/);
+  assert.match(styles, /\.page > \.empty-state[\s\S]*border: 1\.5px dashed/);
 });

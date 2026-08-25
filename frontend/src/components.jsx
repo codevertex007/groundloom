@@ -17,8 +17,7 @@ export function PageHeader({ eyebrow, title, meta, action, onBack }) {
           <ArrowLeft size={17} />
         </button>
       )}
-      <div>
-        <div className="eyebrow">{eyebrow}</div>
+      <div className="page-header-title" data-eyebrow={eyebrow || undefined}>
         <h1>{title}</h1>
         {meta && <span className="header-meta">{meta}</span>}
       </div>

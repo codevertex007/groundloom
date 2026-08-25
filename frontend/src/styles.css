@@ -2097,3 +2097,220 @@ input::placeholder {
     overflow-x: hidden;
   }
 }
+
+/* Exact workspace composition from the supplied reference canvas. */
+.page-header-title {
+  display: flex;
+  align-items: baseline;
+  gap: 11px;
+  min-width: 0;
+}
+
+.page-header-title h1 {
+  flex: none;
+}
+
+.page-header-title .header-meta {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.projects-toolbar,
+.sources-toolbar,
+.project-grid,
+.page > .empty-state,
+.table-card {
+  width: min(1120px, 100%);
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.projects-toolbar {
+  align-items: center;
+  margin-bottom: 0;
+}
+
+.project-filters {
+  display: flex;
+  flex: none;
+  gap: 5px;
+  min-width: 0;
+}
+
+.filter-button {
+  height: 33px;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 0 11px;
+  border: 1px solid var(--border-strong);
+  border-radius: 4px;
+  background: var(--panel);
+  color: var(--muted);
+  font: 600 11.5px/1 "IBM Plex Sans", sans-serif;
+  white-space: nowrap;
+}
+
+.filter-button span {
+  color: var(--faint);
+  font: 500 9.5px/1 ui-monospace, SFMono-Regular, monospace;
+}
+
+.filter-button:hover,
+.filter-button.selected {
+  border-color: var(--accent);
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.page > .empty-state {
+  min-height: 0;
+  margin-top: 30px;
+  padding: 52px 30px;
+  border: 1.5px dashed var(--border-strong);
+  border-radius: 8px;
+  background: var(--panel);
+}
+
+.page > .empty-state h2 {
+  margin-bottom: 6px;
+  font-size: 14.5px;
+}
+
+.page > .empty-state p {
+  max-width: 340px;
+  margin-bottom: 16px;
+  line-height: 1.6;
+}
+
+.project-grid {
+  margin-top: 13px;
+  grid-template-columns: repeat(auto-fill, minmax(272px, 1fr));
+  gap: 13px;
+}
+
+.project-card {
+  display: flex;
+  flex-direction: column;
+  gap: 11px;
+  min-height: 0;
+  padding: 15px 16px;
+  border-radius: 5px;
+}
+
+.project-card .card-top {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.project-type-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--accent);
+  font: 600 8.5px/1 ui-monospace, SFMono-Regular, monospace;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.project-type-dot {
+  width: 6px;
+  height: 6px;
+  flex: none;
+  border-radius: 2px;
+  background: var(--accent);
+}
+
+.project-card .card-date {
+  margin-left: auto;
+  color: var(--faint);
+  font: 400 9.5px/1 ui-monospace, SFMono-Regular, monospace;
+  white-space: nowrap;
+}
+
+.project-card h2 {
+  margin: 0;
+  font-size: 13.5px;
+  line-height: 1.35;
+}
+
+.project-status-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+}
+
+.project-status-row .status-dot {
+  flex: none;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--accent);
+  font: 600 8.5px/1 ui-monospace, SFMono-Regular, monospace;
+}
+
+.project-status-row .progress-line {
+  flex: 1;
+  height: 3px;
+  margin: 0;
+  border-radius: 2px;
+}
+
+.project-card .card-footer {
+  width: 100%;
+  display: flex;
+  gap: 12px;
+  padding-top: 8px;
+  border-top: 1px solid var(--border);
+  color: var(--faint);
+  font: 400 10px/1.2 ui-monospace, SFMono-Regular, monospace;
+}
+
+.sources-toolbar .search-box {
+  flex: none;
+  width: min(340px, 100%);
+}
+
+.sources-toolbar .soft-button {
+  margin-left: auto;
+}
+
+@media (max-width: 760px) {
+  .page-header-title {
+    flex: 1 1 145px;
+    gap: 7px;
+  }
+
+  .page-header-title .header-meta {
+    font-size: 8.5px;
+  }
+
+  .projects-toolbar,
+  .sources-toolbar {
+    width: 100%;
+  }
+
+  .project-filters {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 2px;
+  }
+
+  .filter-button {
+    flex: 0 0 auto;
+  }
+
+  .sources-toolbar .search-box {
+    width: 100%;
+  }
+
+  .sources-toolbar .soft-button {
+    margin-left: 0;
+  }
+}
