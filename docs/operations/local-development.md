@@ -20,6 +20,9 @@ backend/scripts/agent_worker.py --once.
 index and selects the pgvector derived table for PostgreSQL. The deployment-
 shaped Postgres stack requires migration 015 and an installed pgvector
 extension before source ingestion or semantic search is exercised.
+The bundled MinIO emulator does not provide the production KMS/SSE setup, so
+deployment-shaped local tests use `GROUNDLOOM_OBJECT_STORE_SSE_MODE=none`;
+production startup rejects that mode and requires AES-256 or KMS encryption.
 Image-only PDFs enter the `ocr` ingestion stage. Credential-free local mode
 fails those versions with a typed provider-configuration error; to exercise
 OCR success, configure `GROUNDLOOM_OCR_PROVIDER=http` with a local or staging

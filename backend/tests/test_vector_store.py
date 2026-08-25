@@ -99,6 +99,7 @@ def test_production_rejects_an_explicit_local_vector_index():
         telemetry_provider="langfuse",
         object_store_backend="s3",
         object_store_bucket="groundloom",
+        object_store_sse_mode="AES256",
         checkpoint_backend="postgres",
         auth_secret="local-test-secret-that-is-at-least-32-chars",
         auth_mode="hmac",

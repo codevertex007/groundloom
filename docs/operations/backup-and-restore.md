@@ -1,6 +1,6 @@
 # Backup and restore
 
-Back up Postgres including checkpoints/audit/outbox and protect object storage versions according to retention. Encrypt, restrict access, monitor completion, and document RPO/RTO after phase-08 measurement.
+Back up Postgres including checkpoints/audit/outbox and protect object storage versions according to retention. Encrypt database backups through the deployment backup/KMS control plane; object-store writes use the configured AES-256 or KMS server-side encryption policy in production. Restrict access, monitor completion, and document RPO/RTO after phase-08 measurement.
 
 Restore exercises use an isolated environment: restore DB, validate migrations/constraints/counts/sample hashes, restore/verify object references, rebuild derived indexes, resume eligible checkpoints, and execute core read/proposal/export smoke. Record duration, gaps, and corrective action. A backup without tested restore is not release evidence.
 

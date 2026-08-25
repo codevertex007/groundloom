@@ -78,7 +78,11 @@ class S3ObjectStore:
             raise RuntimeError("S3 read timeout must be positive")
         if settings.object_store_max_attempts < 1:
             raise RuntimeError("S3 max attempts must be at least one")
+        if settings.object_store_sse_mode == "aws:kms" and not settings.object_store_kms_key_id:
+            raise RuntimeError("AWS KMS object storage requires GROUNDLOOM_OBJECT_STORE_KMS_KEY_ID")
         self.bucket = settings.object_store_bucket
+        self.sse_mode = settings.object_store_sse_mode
+        self.kms_key_id = settings.object_store_kms_key_id
         self.client_config = Config(
             connect_timeout=settings.object_store_connect_timeout_seconds,
             read_timeout=settings.object_store_read_timeout_seconds,
@@ -106,9 +110,24 @@ class S3ObjectStore:
             retryable=True,
         )
 
+    def _encryption_options(self) -> dict[str, str]:
+        if self.sse_mode == "AES256":
+            return {"ServerSideEncryption": "AES256"}
+        if self.sse_mode == "aws:kms":
+            options = {"ServerSideEncryption": "aws:kms"}
+            if self.kms_key_id:
+                options["SSEKMSKeyId"] = self.kms_key_id
+            return options
+        return {}
+
     def put_bytes(self, key: str, data: bytes) -> None:
         try:
-            self.client.put_object(Bucket=self.bucket, Key=_validate_key(key), Body=data)
+            self.client.put_object(
+                Bucket=self.bucket,
+                Key=_validate_key(key),
+                Body=data,
+                **self._encryption_options(),
+            )
         except Exception as exc:
             raise self._dependency_error(exc) from exc
 

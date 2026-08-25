@@ -24,6 +24,8 @@ class Settings(BaseSettings):
     object_store_region: str = "us-east-1"
     object_store_access_key: str | None = None
     object_store_secret_key: str | None = None
+    object_store_sse_mode: Literal["none", "AES256", "aws:kms"] = "none"
+    object_store_kms_key_id: str | None = None
     object_store_connect_timeout_seconds: int = 5
     object_store_read_timeout_seconds: int = 30
     object_store_max_attempts: int = 3
@@ -109,6 +111,10 @@ class Settings(BaseSettings):
                 raise RuntimeError("Production requires S3-compatible object storage")
             if not self.object_store_bucket:
                 raise RuntimeError("Production requires an object storage bucket")
+            if self.object_store_sse_mode == "none":
+                raise RuntimeError("Production requires server-side object-storage encryption")
+            if self.object_store_sse_mode == "aws:kms" and not self.object_store_kms_key_id:
+                raise RuntimeError("AWS KMS object-storage encryption requires a key ID")
             if self.checkpoint_backend != "postgres":
                 raise RuntimeError("Production requires the Postgres checkpoint backend")
             if self.retrieval_index_backend == "local":
@@ -185,6 +191,8 @@ class Settings(BaseSettings):
             ),
             "checkpoint_backend": self.checkpoint_backend,
             "object_store_backend": self.object_store_backend,
+            "object_store_sse_mode": self.object_store_sse_mode,
+            "object_store_kms_key_configured": bool(self.object_store_kms_key_id),
             "object_store_connect_timeout_seconds": self.object_store_connect_timeout_seconds,
             "object_store_max_attempts": self.object_store_max_attempts,
             "object_store_read_timeout_seconds": self.object_store_read_timeout_seconds,

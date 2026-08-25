@@ -30,6 +30,8 @@ The object-store adapter owns binary bytes and validates server-derived keys.
 Its SDK client uses bounded standard retries with explicit connect/read
 timeouts, and maps every provider failure to the stable Groundloom error
 taxonomy so credentials, provider response bodies, and SDK exception details
-never cross the API boundary.
+never cross the API boundary. Local development may omit server-side
+encryption; production configuration requires AES-256 or AWS KMS and the
+adapter propagates the selected encryption headers on writes.
 The Postgres checkpointer owns execution state only. Langfuse receives redacted
 events and is not product storage.

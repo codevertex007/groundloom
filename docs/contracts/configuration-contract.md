@@ -47,9 +47,12 @@ receives base64 source bytes and must return a non-empty `{text}` object; its
 provider response and credentials never cross the product error boundary.
 S3-compatible storage calls use `object_store_max_attempts` (default 3) with
 `object_store_connect_timeout_seconds` (default 5) and
-`object_store_read_timeout_seconds` (default 30). Storage SDK failures are
-translated to typed retryable dependency errors; provider exception details
-are never returned or logged as product errors.
+`object_store_read_timeout_seconds` (default 30). Local/MinIO development may
+use `object_store_sse_mode=none`; production requires `AES256` or
+`aws:kms`, and KMS mode requires `GROUNDLOOM_OBJECT_STORE_KMS_KEY_ID`.
+`put_object` applies the configured server-side encryption headers. Storage SDK
+failures are translated to typed retryable dependency errors; provider
+exception details are never returned or logged as product errors.
 `agent_inline_local=true` is the explicit local/test convenience default. It
 must be disabled for production; staging/production agent runs are queued for
 the durable agent worker and are never completed synchronously by the API.

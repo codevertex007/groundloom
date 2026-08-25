@@ -64,6 +64,8 @@ def test_external_adapters_classify_outages_without_leaking_provider_errors():
     writes = object.__new__(S3ObjectStore)
     writes.bucket = "test"
     writes.client = WriteFailingClient("AccessDenied")
+    writes.sse_mode = "none"
+    writes.kms_key_id = None
     with pytest.raises(GroundloomError) as put_error:
         writes.put_bytes("artifact.bin", b"data")
     assert put_error.value.code == "DEPENDENCY_UNAVAILABLE"
@@ -88,6 +90,31 @@ def test_external_adapters_classify_outages_without_leaking_provider_errors():
     assert telemetry.last_error_class == "RuntimeError"
 
 
+def test_s3_object_store_propagates_configured_server_side_encryption():
+    calls = []
+
+    class Client:
+        def put_object(self, **kwargs):
+            calls.append(kwargs)
+
+    aes = object.__new__(S3ObjectStore)
+    aes.bucket = "groundloom"
+    aes.client = Client()
+    aes.sse_mode = "AES256"
+    aes.kms_key_id = None
+    aes.put_bytes("artifact.txt", b"safe")
+    assert calls[-1]["ServerSideEncryption"] == "AES256"
+
+    kms = object.__new__(S3ObjectStore)
+    kms.bucket = "groundloom"
+    kms.client = Client()
+    kms.sse_mode = "aws:kms"
+    kms.kms_key_id = "alias/groundloom"
+    kms.put_bytes("artifact-kms.txt", b"safe")
+    assert calls[-1]["ServerSideEncryption"] == "aws:kms"
+    assert calls[-1]["SSEKMSKeyId"] == "alias/groundloom"
+
+
 def test_production_requires_postgres_checkpoint_and_s3_storage():
     settings = Settings(
         env="production",
@@ -98,6 +125,7 @@ def test_production_requires_postgres_checkpoint_and_s3_storage():
         telemetry_provider="langfuse",
         object_store_backend="s3",
         object_store_bucket="groundloom",
+        object_store_sse_mode="AES256",
         checkpoint_backend="postgres",
         auth_secret="local-test-secret-that-is-at-least-32-chars",
         auth_mode="hmac",
@@ -116,6 +144,9 @@ def test_production_requires_postgres_checkpoint_and_s3_storage():
     )
     settings.validate_runtime()
     assert isinstance(build_checkpoint_provider(settings), PostgresCheckpointProvider)
+    settings.object_store_sse_mode = "none"
+    with pytest.raises(RuntimeError, match="server-side object-storage encryption"):
+        settings.validate_runtime()
 
 
 def test_production_rejects_weak_identity_and_local_domains():
@@ -128,6 +159,7 @@ def test_production_rejects_weak_identity_and_local_domains():
         telemetry_provider="langfuse",
         object_store_backend="s3",
         object_store_bucket="groundloom",
+        object_store_sse_mode="AES256",
         checkpoint_backend="postgres",
         auth_secret="too-short",
         auth_mode="hmac",
