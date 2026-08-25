@@ -1,4 +1,5 @@
 import base64
+import json
 from pathlib import Path
 
 import pytest
@@ -13,7 +14,7 @@ from app.object_store import LocalObjectStore, S3ObjectStore
 from app.services import run_agent_worker_once, run_ingestion_worker_once
 from app.telemetry import LangfuseTelemetry
 from fastapi.testclient import TestClient
-from scripts.backup_local import build_manifest, copy_tree, verify_manifest
+from scripts.backup_local import build_manifest, copy_tree, restore_backup, verify_manifest
 
 
 def test_local_object_store_rejects_escape_and_round_trips(tmp_path: Path):
@@ -309,6 +310,34 @@ def test_local_backup_manifest_verifies_database_and_objects(tmp_path: Path):
     restored_database.write_bytes(backup_database.read_bytes())
     copy_tree(backup_objects, restored_objects)
     verify_manifest(restored_database, restored_objects, manifest)
+
+
+def test_local_restore_validates_before_overwriting_and_rejects_extra_objects(tmp_path: Path):
+    database = tmp_path / "groundloom.db"
+    objects = tmp_path / "objects"
+    objects.mkdir()
+    database.write_bytes(b"good database")
+    (objects / "artifact.bin").write_bytes(b"good artifact")
+    backup = tmp_path / "backup"
+    backup.mkdir()
+    backup_database = backup / "groundloom.db"
+    backup_objects = backup / "objects"
+    backup_database.write_bytes(database.read_bytes())
+    copy_tree(objects, backup_objects)
+    manifest = build_manifest(backup_database, backup_objects)
+    (backup / "manifest.json").write_text(json.dumps(manifest), encoding="utf-8")
+
+    target_database = tmp_path / "target.db"
+    target_objects = tmp_path / "target-objects"
+    target_objects.mkdir()
+    target_database.write_bytes(b"existing target")
+    (target_objects / "existing.txt").write_bytes(b"preserve on failed restore")
+    (backup_objects / "unexpected.bin").write_bytes(b"not in manifest")
+
+    with pytest.raises(SystemExit, match="object inventory mismatch"):
+        restore_backup(target_database, target_objects, backup)
+    assert target_database.read_bytes() == b"existing target"
+    assert (target_objects / "existing.txt").read_bytes() == b"preserve on failed restore"
 
 
 def test_agent_worker_claims_queued_runs_and_preserves_inline_local_mode(tmp_path: Path):
