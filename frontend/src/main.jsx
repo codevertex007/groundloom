@@ -208,6 +208,7 @@ function App() {
           <NewProjectModal
             sources={sources}
             skills={skills}
+            onRefresh={refresh}
             onClose={() => setNewProjectOpen(false)}
           onCreated={async (project) => {
             setNewProjectOpen(false);
@@ -1662,7 +1663,7 @@ function CitationPanel({ citation, onClose }) {
   );
 }
 
-function NewProjectModal({ sources, skills, onClose, onCreated }) {
+function NewProjectModal({ sources, skills, onRefresh, onClose, onCreated }) {
   const [form, setForm] = useState({
     name: "",
     project_type: "knowledge_brief",
@@ -1671,7 +1672,47 @@ function NewProjectModal({ sources, skills, onClose, onCreated }) {
     skill_version_ids: [],
   });
   const [busy, setBusy] = useState(false);
+  const [uploadingSource, setUploadingSource] = useState(false);
   const [error, setError] = useState(null);
+  const readySources = sources.filter((source) => source.latest_status === "ready");
+  const publishedSkills = skills
+    .map((skill) => ({
+      ...skill,
+      version: skill.versions?.find((version) => version.status === "published"),
+    }))
+    .filter((skill) => skill.version);
+  const projectTypes = [
+    { value: "knowledge_brief", label: "Training Course", color: "#a78bfa" },
+    { value: "sop", label: "SOP", color: "#f0b429" },
+    { value: "technical_documentation", label: "Technical Documentation", color: "#5b93f0" },
+    { value: "user_manual", label: "User Manual", color: "#2dd4bf" },
+  ];
+  const uploadSource = (event) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    setUploadingSource(true);
+    const reader = new FileReader();
+    reader.onload = async () => {
+      try {
+        await api("/v1/sources/uploads", {
+          method: "POST",
+          body: JSON.stringify({
+            name: file.name.replace(/\.[^.]+$/, ""),
+            filename: file.name,
+            content_base64: String(reader.result).split(",")[1],
+            mime_type: file.type || "text/plain",
+          }),
+        });
+        await onRefresh?.();
+      } catch (uploadError) {
+        setError(uploadError);
+      } finally {
+        setUploadingSource(false);
+        event.target.value = "";
+      }
+    };
+    reader.readAsDataURL(file);
+  };
   const submit = async () => {
     setBusy(true);
     try {
@@ -1692,13 +1733,10 @@ function NewProjectModal({ sources, skills, onClose, onCreated }) {
         className="modal wide"
         role="dialog"
         aria-modal="true"
-        aria-labelledby="new-project-title"
+        aria-label="Start a grounded workspace"
       >
         <div className="modal-head">
-          <div>
-            <span className="eyebrow">NEW PROJECT</span>
-            <h2 id="new-project-title">Start a grounded workspace</h2>
-          </div>
+          <h2 id="new-project-title">New Project</h2>
           <button
             className="icon-button"
             aria-label="Close new project dialog"
@@ -1707,102 +1745,106 @@ function NewProjectModal({ sources, skills, onClose, onCreated }) {
             <X size={17} />
           </button>
         </div>
-        {error && <ErrorNotice error={error} onDismiss={() => setError(null)} />}
-        <label>
-          Project name
-          <input
-            aria-label="Project name"
-            autoFocus
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            placeholder="e.g. Field maintenance guide"
-          />
-        </label>
-        <label>
-          Project type
-          <select
-            aria-label="Project type"
-            value={form.project_type}
-            onChange={(e) => setForm({ ...form, project_type: e.target.value })}
-          >
-            <option value="knowledge_brief">Knowledge brief</option>
-            <option value="training_guide">Training guide</option>
-            <option value="research_report">Research report</option>
-          </select>
-        </label>
-        <label>
-          Brief
-          <textarea
-            aria-label="Project brief"
-            value={form.brief}
-            onChange={(e) => setForm({ ...form, brief: e.target.value })}
-            placeholder="What should the collaborator help you produce? Include audience and intended outcome."
-          />
-        </label>
-        <label>
-          Selected evidence
-          <span className="select-list">
-            {sources
-              .filter((s) => s.latest_status === "ready")
-              .map((s) => (
+        <div className="new-project-body">
+          {error && <ErrorNotice error={error} onDismiss={() => setError(null)} />}
+          <label className="modal-field">
+            Project name
+            <input
+              aria-label="Project name"
+              autoFocus
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              placeholder="e.g. Field maintenance guide"
+            />
+          </label>
+          <div className="modal-field">
+            <span>Content type</span>
+            <select
+              className="sr-only"
+              aria-label="Project type"
+              value={form.project_type}
+              onChange={(e) => setForm({ ...form, project_type: e.target.value })}
+            >
+              {projectTypes.map((type) => (
+                <option value={type.value} key={type.value}>
+                  {type.label}
+                </option>
+              ))}
+            </select>
+            <div className="content-type-grid" role="radiogroup" aria-label="Project type choices">
+              {projectTypes.map((type) => (
                 <button
                   type="button"
-                  className={
-                    form.source_version_ids.includes(s.current_version_id)
-                      ? "selected"
-                      : ""
-                  }
-                  aria-pressed={form.source_version_ids.includes(
-                    s.current_version_id,
-                  )}
+                  className={form.project_type === type.value ? "selected" : ""}
+                  role="radio"
+                  aria-checked={form.project_type === type.value}
+                  onClick={() => setForm({ ...form, project_type: type.value })}
+                  key={type.value}
+                >
+                  <span className="content-type-dot" style={{ background: type.color }} />
+                  <strong>{type.label}</strong>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="modal-field">
+            <span>Sources</span>
+            <label className="source-dropzone">
+              <Upload size={20} />
+              <div>
+                <strong>{uploadingSource ? "Uploading source…" : <>Drag &amp; drop files, or <em>browse</em></>}</strong>
+                <small>PDF · DOCX · URL · up to 200MB each</small>
+              </div>
+              <input
+                type="file"
+                accept=".txt,.md,.pdf,.docx"
+                aria-label="Upload source"
+                disabled={uploadingSource}
+                onChange={uploadSource}
+              />
+            </label>
+            <span className="select-list source-selection-list">
+              {readySources.map((source) => (
+                <button
+                  type="button"
+                  className={form.source_version_ids.includes(source.current_version_id) ? "selected" : ""}
+                  aria-pressed={form.source_version_ids.includes(source.current_version_id)}
                   onClick={() =>
                     setForm({
                       ...form,
-                      source_version_ids: form.source_version_ids.includes(
-                        s.current_version_id,
-                      )
-                        ? form.source_version_ids.filter(
-                            (id) => id !== s.current_version_id,
-                          )
-                        : [...form.source_version_ids, s.current_version_id],
+                      source_version_ids: form.source_version_ids.includes(source.current_version_id)
+                        ? form.source_version_ids.filter((id) => id !== source.current_version_id)
+                        : [...form.source_version_ids, source.current_version_id],
                     })
                   }
-                  key={s.id}
+                  key={source.id}
                 >
                   <FileText size={14} />
-                  {s.name}
+                  <span className="selection-name">{source.name}</span>
                   <span>
-                    {form.source_version_ids.includes(s.current_version_id) ? (
-                      <Check size={14} />
-                    ) : (
-                      ""
-                    )}
+                    {form.source_version_ids.includes(source.current_version_id) ? <Check size={14} /> : ""}
                   </span>
                 </button>
               ))}
-            {sources.filter((s) => s.latest_status === "ready").length ===
-              0 && (
-              <span className="muted">
-                Upload a source first, or continue with an evidence gap.
-              </span>
-            )}
-          </span>
-        </label>
-        <label>
-          Active skills
-          <span className="select-list">
-            {skills
-              .map((skill) => ({
-                ...skill,
-                version: skill.versions?.find((version) => version.status === "published"),
-              }))
-              .filter((skill) => skill.version)
-              .map((skill) => (
+              {readySources.length === 0 && <span className="muted">No sources selected. Evidence gap is allowed.</span>}
+            </span>
+          </div>
+          <label className="modal-field">
+            Brief
+            <textarea
+              aria-label="Project brief"
+              value={form.brief}
+              onChange={(e) => setForm({ ...form, brief: e.target.value })}
+              placeholder="Describe what you want to create, the target audience, and any constraints…"
+            />
+          </label>
+          <div className="modal-field">
+            <span>Active skills</span>
+            <span className="select-list skill-selection-list">
+              {publishedSkills.map((skill) => (
                 <button
                   type="button"
-                  className={
-                    form.skill_version_ids.includes(skill.version.id) ? "selected" : ""
-                  }
+                  className={form.skill_version_ids.includes(skill.version.id) ? "selected" : ""}
                   aria-pressed={form.skill_version_ids.includes(skill.version.id)}
                   onClick={() =>
                     setForm({
@@ -1815,36 +1857,32 @@ function NewProjectModal({ sources, skills, onClose, onCreated }) {
                   key={skill.id}
                 >
                   <Sparkles size={14} />
-                  {skill.name}
+                  <span className="selection-name">{skill.name}</span>
                   <small>{skill.scope}</small>
-                  <span>
-                    {form.skill_version_ids.includes(skill.version.id) ? <Check size={14} /> : ""}
-                  </span>
+                  <span>{form.skill_version_ids.includes(skill.version.id) ? <Check size={14} /> : ""}</span>
                 </button>
               ))}
-            {skills.filter((skill) =>
-              skill.versions?.some((version) => version.status === "published"),
-            ).length === 0 && (
-              <span className="muted">Publish a skill first, or continue with the default harness.</span>
-            )}
+              {publishedSkills.length === 0 && (
+                <span className="muted">Publish a skill first, or continue with the default harness.</span>
+              )}
+            </span>
+          </div>
+        </div>
+        <div className="new-project-footer">
+          <span className="new-project-summary">
+            {form.source_version_ids.length} sources · {form.skill_version_ids.length} skills selected
           </span>
-        </label>
-        <div className="modal-actions">
-          <button className="soft-button" onClick={onClose}>
-            Cancel
-          </button>
-          <button
-            className="primary-button"
-            disabled={busy || !form.name || !form.brief}
-            onClick={submit}
-          >
-            {busy ? (
-              <LoaderCircle className="spin" size={15} />
-            ) : (
-              <Sparkles size={15} />
-            )}{" "}
-            Create project
-          </button>
+          <div className="modal-actions">
+            <button className="soft-button" onClick={onClose}>Cancel</button>
+            <button
+              className="primary-button"
+              aria-label="Create project"
+              disabled={busy || !form.name || !form.brief}
+              onClick={submit}
+            >
+              {busy ? <LoaderCircle className="spin" size={15} /> : <Sparkles size={15} />} Generate Outline
+            </button>
+          </div>
         </div>
       </div>
     </div>

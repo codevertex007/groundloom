@@ -94,10 +94,15 @@ test("reference shell keeps branding compact and prevents narrow viewport overfl
   assert.match(uiSource, /className="page-header-title"/);
   assert.match(source, /className="project-filters"/);
   assert.match(source, /filter-button/);
+  assert.match(source, /className="content-type-grid"/);
+  assert.match(source, /className="source-dropzone"/);
+  assert.match(source, /className="new-project-footer"/);
   assert.match(styles, /--panel: #121518/);
   assert.match(styles, /\.main-shell[\s\S]*overflow-x: hidden/);
   assert.match(styles, /\.sidebar \.brand-copy[\s\S]*display: none/);
   assert.match(styles, /\.toolbar \.search-box[\s\S]*flex: 1 1 100%/);
   assert.match(styles, /\.project-grid[\s\S]*grid-template-columns: 1fr/);
   assert.match(styles, /\.page > \.empty-state[\s\S]*border: 1\.5px dashed/);
+  assert.match(styles, /\.modal-backdrop[\s\S]*backdrop-filter: blur\(2px\)/);
+  assert.match(styles, /\.modal-field input,[\s\S]*background: var\(--panel-2\)/);
 });
