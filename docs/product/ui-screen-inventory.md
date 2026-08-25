@@ -8,7 +8,7 @@ The attached `docs/ref/ui/design_ref.zip` is the visual baseline. During fronten
 | New Project | Type, brief, sources, active skills, validation, create, agent-start/retry |
 | Sources | Upload, scan/parse/index progress, ready, failed, version history, replace/new version |
 | Source explorer | Search, page/section navigation, passage highlight, citation back-navigation |
-| Skills | Starter/org/workspace filters, package detail, version history, fork, draft, validate, publish |
+| Skills | Searchable/collapsible starter, organization, and workspace groups; package detail, version history, fork, draft, import, validate, publish |
 | AI skill author | Conversation, draft preview, validation errors, repair, approval/publication |
 | Project canvas | Persistent agent panel, outline/content tabs, active module/block, citations, run activity |
 | Outline | Proposed/approved versions, module statuses, edit/reorder, approval/rejection |
@@ -35,15 +35,15 @@ The archive contains one Design Canvas export, `Knowledge Platform.dc.html`, wit
 
 | Route/surface | Reference behavior observed | Groundloom implementation |
 |---|---|---|
-| `/projects` | Warm neutral workspace shell, collapsible left navigation, search/filter toolbar, cards with source/section counts and progress, cursor pagination, empty state, New Project action | `ProjectsScreen`, real `GET /v1/projects/page` with bounded opaque cursor, loading/empty/error states |
+| `/projects` | Dark studio shell, 210px collapsible left navigation, 52px header, centered 1120px search/filter/card frame, cards with source/section counts and progress, cursor pagination, empty state, New Project action | `ProjectsScreen`, real `GET /v1/projects/page` with bounded opaque cursor, loading/empty/error states; local compatibility falls back to `GET /v1/projects` only when an older server reports the page route as missing |
 | `/sources` | Searchable source library, file-type badges, source rows and processing/version status | `SourcesScreen`, upload/finalize against `POST /v1/sources/uploads`, immutable version-history modal, and source-version upload against `POST /v1/sources/{source_id}/versions` |
-| `/skills` | Starter/organization/workspace skill cards and filters, package descriptions, version detail, create/fork menu, AI-author affordance, validation/repair/publication controls | `SkillsScreen`, scoped list/filter plus AI-draft/fork/validate/repair/publish API path, immutable version history, scoped package metadata |
+| `/skills` | Starter/organization/workspace collapsible groups, package search and descriptions, version detail, split create/import menu, AI-author affordance, validation/repair/publication controls | `SkillsScreen`, scoped grouped/searchable list plus real import-to-draft, AI-draft/fork/validate/repair/publish API paths, immutable version history, scoped package metadata |
 | `/projects/new` | Reference dark modal with fixed header/footer, content-type cards, project brief, dashed evidence area, source selection, active published-skill selection, validation before create | `NewProjectModal`, real project command with selected ready source and published skill versions |
-| `/projects/:id/canvas` | Three-column canvas: source/search rail, outline/content tabs, persistent Copilot panel, activity/todos, citation and proposal review | `Canvas`, durable event replay, typed content/outline DTOs, supported heading/text/list/table/figure renderers, authorized immutable-passage citation lookup, deterministic validation checklist/findings, accept/reject diff |
+| `/projects/:id/canvas` | 42px source rail with a 296px overlay explorer, outline/content editor, persistent 348px Copilot chat/activity panel, 36px document stats, citations, review, and proposals | `Canvas`, durable event replay, typed content/outline DTOs, supported heading/text/list/table/figure renderers, authorized immutable-passage citation lookup, deterministic validation checklist/findings, accept/reject diff |
 | Canvas overlays | Citation context, proposed diff, deterministic review checklist, accept/reject, loading, permission, retryable, and unavailable states | `CitationPanel`, `ValidationPanel`, `DiffCard`, `ErrorNotice`, deterministic validation/patch endpoints |
-| `/export` and Settings | Export/preview action, review preferences, default format, keyboard command palette | Export action, `SettingsModal`, `CommandPalette` (`⌘K`/`Ctrl+K`) |
+| `/export` and Settings | 760px right-side Export & Preview sheet, version/template/format controls, review preferences, default format, keyboard command palette | Real export job/artifact action, `ExportPanel`, `SettingsModal`, `CommandPalette` (`⌘K`/`Ctrl+K`) |
 
-The reference also uses visible keyboard focus, compact monospace metadata labels, keyboard-dismissable overlays, dark panel controls, dashed source drop areas, and responsive collapse of the rail/Copilot. Those behaviors are retained in the React client.
+The reference also uses IBM Plex Sans/Mono and Source Serif 4, visible keyboard focus, compact monospace metadata labels, keyboard-dismissable overlays, dark panel controls, dashed source drop areas, and responsive collapse of the primary navigation at narrow widths. Those behaviors and the archive's exact core dimensions are retained in the React client through `frontend/src/ui/reference-theme.css`.
 
 ## Implementation evidence
 

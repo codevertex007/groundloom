@@ -16,6 +16,10 @@ const skillAuthor = await readFile(
   "utf8",
 );
 const styles = await readFile(new URL("./styles.css", import.meta.url), "utf8");
+const referenceStyles = await readFile(
+  new URL("./ui/reference-theme.css", import.meta.url),
+  "utf8",
+);
 const uiSource = `${source}\n${components}\n${aiComponents}\n${skillAuthor}`;
 
 test("reference surfaces and connected mutations are present in the UI", () => {
@@ -84,7 +88,8 @@ test("interactive reference states expose keyboard and assistive semantics", () 
   assert.match(source, /aria-expanded=\{open === skill\.id\}/);
   assert.match(source, /event\.key === "Enter" \|\| event\.key === " "/);
   assert.match(source, /aria-pressed=\{status === value\}/);
-  assert.match(source, /Filter skills by scope/);
+  assert.match(source, /className="skill-scope-heading"/);
+  assert.match(source, /aria-label="Search skills"/);
 });
 
 test("reference shell keeps branding compact and prevents narrow viewport overflow", () => {
@@ -105,4 +110,13 @@ test("reference shell keeps branding compact and prevents narrow viewport overfl
   assert.match(styles, /\.page > \.empty-state[\s\S]*border: 1\.5px dashed/);
   assert.match(styles, /\.modal-backdrop[\s\S]*backdrop-filter: blur\(2px\)/);
   assert.match(styles, /\.modal-field input,[\s\S]*background: var\(--panel-2\)/);
+  for (const exactReferenceDimension of [
+    /\.sidebar[\s\S]*width: 210px/,
+    /\.source-rail[\s\S]*width: 42px/,
+    /\.source-flyout[\s\S]*width: 296px/,
+    /\.copilot[\s\S]*width: 348px/,
+    /\.canvas-header[\s\S]*height: 52px/,
+  ]) {
+    assert.match(referenceStyles, exactReferenceDimension);
+  }
 });

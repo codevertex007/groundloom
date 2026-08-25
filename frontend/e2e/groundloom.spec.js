@@ -166,15 +166,14 @@ test("creates, validates, repairs, and publishes an AI-authored skill draft", as
   await page.goto("/");
   await page.getByRole("button", { name: "Skills", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Skills", exact: true })).toBeVisible();
-  await page.getByRole("button", { name: "starter", exact: true }).click();
   const starterCard = page.locator(".skill-card").filter({ hasText: "Source-grounded writing" });
   await expect(starterCard).toBeVisible();
   await starterCard.click();
   await starterCard.getByRole("button", { name: "Fork to workspace", exact: true }).click();
-  await page.getByRole("button", { name: "All scopes", exact: true }).click();
   await expect(
     page.locator(".skill-card").filter({ hasText: "Source-grounded writing (fork)" }),
   ).toBeVisible();
+  await page.getByRole("button", { name: "More ways to create a skill", exact: true }).click();
   await page.getByRole("button", { name: "AI author draft", exact: true }).click();
   await page.getByLabel("Skill author objective").fill("Create scoped editorial guidance for grounded drafts.");
   const slug = `browser-skill-${Date.now()}`;
