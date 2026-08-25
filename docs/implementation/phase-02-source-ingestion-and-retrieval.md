@@ -4,7 +4,7 @@
 
 - [x] `IMPL-02-001` Upload/finalization, immutable source/version records, scoped object keys, type/size checks.
 - [x] `IMPL-02-002` Durable leased ingestion job and idempotent stage state machine; local API and `ingestion_worker.py --once` use the same processor.
-- [x] `IMPL-02-003` PDF/DOCX/TXT/Markdown parsers and normalized page/block/chunk schema; OCR remains an adapter extension.
+- [x] `IMPL-02-003` PDF/DOCX/TXT/Markdown parsers and normalized page/block/chunk schema; image-only PDFs enter the explicit OCR adapter stage and fail clearly without a configured provider.
 - [x] `IMPL-02-004` Versioned deterministic chunking/indexing with an explicit scoped, idempotent rebuild worker that persists deterministic local or configured-provider embeddings and mirrors deployment vectors into the scoped pgvector derived table through migration 015.
 - [x] `IMPL-02-005` Authorized bounded hybrid lexical/semantic evidence search with selected-version filtering, deterministic/provider reranking, same-version neighbor expansion, duplicate suppression, and typed provider failure handling.
 - [x] `IMPL-02-006` Passage read/navigation APIs and citation-lineage primitives.

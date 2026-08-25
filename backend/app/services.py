@@ -1992,6 +1992,24 @@ def process_ingestion_job(
         raise GroundloomError(
             "JOB_FAILED", "The source parser rejected this document.", 422
         ) from exc
+    if not text.strip() and extension == "pdf":
+        version.status = "ocr"
+        job.stage = "ocr"
+        append_source_stage(db, ctx, version, "ocr")
+        try:
+            from .ocr import build_ocr_provider
+
+            text = build_ocr_provider(settings).extract(raw, extension)
+        except GroundloomError as exc:
+            version.status = "failed"
+            version.failure_code = exc.code
+            job.status = "failed"
+            job.stage = "failed"
+            job.error_code = exc.code
+            job.lease_owner = None
+            job.lease_until = None
+            append_source_stage(db, ctx, version, "failed")
+            raise
     if not text.strip():
         version.status = "failed"
         version.failure_code = "EMPTY_DOCUMENT"

@@ -39,6 +39,12 @@ verdicts; outages and malformed responses are typed failures. Production
 rejects the local scanner setting. Multipart uploads are read in bounded
 chunks and stop once `max_upload_bytes` is exceeded; the endpoint never loads
 an unbounded file into memory before applying the upload limit.
+OCR defaults to an explicit local-unavailable adapter. Image-only PDFs enter
+the `ocr` ingestion stage and fail with a typed configuration error unless an
+HTTP-compatible provider is configured with `GROUNDLOOM_OCR_BASE_URL`,
+`GROUNDLOOM_OCR_API_KEY`, bounded timeout, and bounded output size. The sidecar
+receives base64 source bytes and must return a non-empty `{text}` object; its
+provider response and credentials never cross the product error boundary.
 S3-compatible storage calls use `object_store_max_attempts` (default 3) with
 `object_store_connect_timeout_seconds` (default 5) and
 `object_store_read_timeout_seconds` (default 30). Storage SDK failures are

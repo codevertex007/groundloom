@@ -31,7 +31,7 @@
 - Documentation drift during autonomous implementation: root `AGENTS.md`, traceability gates, and same-change documentation policy.
 - Framework API drift: pin dependencies and check `docs/ref/deepagents/` plus current official docs before upgrades.
 - Local execution uses explicit deterministic adapters by default. The main development environment does not install the optional provider extras; an isolated probe environment installed the pinned `deepagents`, Postgres checkpoint, S3, Langfuse, and provider packages and compiled a fake-model graph. Live credentials/service evidence remains open.
-- Ingestion uses a durable leased job/state-machine processor and `ingestion_worker.py --once`; the local API completes small jobs synchronously through that same processor. Export uses the same durable leased state machine; the development adapter runs one bounded inline pass by default for quickstart usability, while GROUNDLOOM_EXPORT_INLINE_LOCAL=false exercises the standalone worker. Backup/restore, load, OCR, and failure-injection exercises remain release work.
+- Ingestion uses a durable leased job/state-machine processor and `ingestion_worker.py --once`; the local API completes small jobs synchronously through that same processor. Export uses the same durable leased state machine; the development adapter runs one bounded inline pass by default for quickstart usability, while GROUNDLOOM_EXPORT_INLINE_LOCAL=false exercises the standalone worker. Backup/restore, load, OCR-provider capacity, and failure-injection exercises remain release work; OCR has an explicit local refusal and HTTP sidecar adapter.
 
 ## Naming note
 

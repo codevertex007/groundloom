@@ -62,6 +62,11 @@ class Settings(BaseSettings):
     source_scanner_base_url: str | None = None
     source_scanner_api_key: str | None = None
     source_scanner_timeout_seconds: float = Field(default=15.0, gt=0, le=120)
+    ocr_provider: str = "local"
+    ocr_base_url: str | None = None
+    ocr_api_key: str | None = None
+    ocr_timeout_seconds: float = Field(default=30.0, gt=0, le=120)
+    ocr_max_output_chars: int = Field(default=20_000_000, ge=1_000, le=50_000_000)
     telemetry_provider: str = "local"
     langfuse_public_key: str | None = None
     langfuse_secret_key: str | None = None
@@ -137,6 +142,12 @@ class Settings(BaseSettings):
                 raise RuntimeError(
                     "The configured production source safety scanner requires endpoint and API key"
                 )
+            if self.ocr_provider == "local":
+                raise RuntimeError("Production requires an explicitly configured OCR provider")
+            if self.ocr_provider in {"http", "http-compatible"} and not all(
+                (self.ocr_base_url, self.ocr_api_key)
+            ):
+                raise RuntimeError("The configured production OCR provider requires endpoint and API key")
 
     def _validate_runtime_database_roles(self) -> None:
         if not self.worker_database_url:
@@ -192,6 +203,10 @@ class Settings(BaseSettings):
             "evaluator_base_url": self.evaluator_base_url,
             "source_scanner_provider": self.source_scanner_provider,
             "source_scanner_base_url": self.source_scanner_base_url,
+            "ocr_provider": self.ocr_provider,
+            "ocr_base_url": self.ocr_base_url,
+            "ocr_timeout_seconds": self.ocr_timeout_seconds,
+            "ocr_max_output_chars": self.ocr_max_output_chars,
             "telemetry_provider": self.telemetry_provider,
             "agent_inline_local": self.agent_inline_local,
             "agent_max_attempts": self.agent_max_attempts,

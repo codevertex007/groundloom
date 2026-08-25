@@ -20,6 +20,11 @@ backend/scripts/agent_worker.py --once.
 index and selects the pgvector derived table for PostgreSQL. The deployment-
 shaped Postgres stack requires migration 015 and an installed pgvector
 extension before source ingestion or semantic search is exercised.
+Image-only PDFs enter the `ocr` ingestion stage. Credential-free local mode
+fails those versions with a typed provider-configuration error; to exercise
+OCR success, configure `GROUNDLOOM_OCR_PROVIDER=http` with a local or staging
+sidecar that implements the bounded `/ocr` contract documented in the
+configuration contract.
 The outbox publisher requires an explicit sink and can be exercised with
 `GROUNDLOOM_OUTBOX_DELIVERY_PROVIDER=webhook`,
 `GROUNDLOOM_OUTBOX_DELIVERY_URL=<local-relay>`, and

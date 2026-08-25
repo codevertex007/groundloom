@@ -110,6 +110,9 @@ def test_production_requires_postgres_checkpoint_and_s3_storage():
         source_scanner_provider="http",
         source_scanner_base_url="https://scanner.example",
         source_scanner_api_key="scanner-test-key",
+        ocr_provider="http",
+        ocr_base_url="https://ocr.example",
+        ocr_api_key="ocr-test-key",
     )
     settings.validate_runtime()
     assert isinstance(build_checkpoint_provider(settings), PostgresCheckpointProvider)
