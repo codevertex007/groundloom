@@ -1,9 +1,9 @@
 import json
 
 import pytest
+from app.ai.persistence.checkpoints import load_checkpoint, save_checkpoint
 from app.ai.runtime.factory import build_agent_runtime
 from app.ai.runtime.local import LocalDeterministicAgentRuntime
-from app.ai.state.checkpoints import load_checkpoint, save_checkpoint
 from app.config import Settings
 from app.db import build_session_factory, init_database, prepare_worker_database
 from app.errors import GroundloomError
@@ -72,6 +72,7 @@ def test_non_sqlite_app_startup_does_not_apply_schema_bootstrap(monkeypatch):
         auth_mode="hmac",
         auth_secret="staging-test-secret-that-is-long-enough",
     )
+
     class FakeEngine:
         pass
 
@@ -165,9 +166,7 @@ def test_local_agent_writes_bounded_run_checkpoint(tmp_path):
         f"/v1/projects/{project['id']}",
         headers={"X-User-ID": "local-user", "X-Workspace-ID": "local-workspace"},
     ).json()
-    checkpoint = load_checkpoint(
-        settings, "local-workspace", project["id"], detail["thread_id"]
-    )
+    checkpoint = load_checkpoint(settings, "local-workspace", project["id"], detail["thread_id"])
     assert checkpoint is not None
     assert checkpoint["run_id"] == response.json()["id"]
     assert checkpoint["status"] == "completed"

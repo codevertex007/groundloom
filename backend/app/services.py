@@ -16,16 +16,16 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
-from .ai.providers.embeddings import build_embedding_provider, cosine_similarity, hybrid_score
-from .ai.providers.evaluation import RubricVersion, build_grader
-from .ai.providers.reranking import build_reranker, combine_rerank_scores
-from .ai.state.checkpoints import save_checkpoint
+from .ai.evaluation.providers import RubricVersion, build_grader
+from .ai.persistence.checkpoints import save_checkpoint
+from .ai.retrieval.providers.embeddings import build_embedding_provider
 from .config import Settings
 from .content_types import validate_block_payload
 from .context import RuntimeContext
 from .db import set_tenant_context, set_worker_context
 from .errors import GroundloomError
 from .ids import new_id
+from .integrations.ai.retrieval import search_evidence
 from .models import (
     AgentRun,
     AgentThread,
@@ -66,10 +66,8 @@ from .models import (
 from .object_store import build_object_store
 from .schemas import (
     DecisionIn,
-    EvidenceBundle,
     ExportCreate,
     MemoryWrite,
-    PassageOut,
     PatchCreate,
     ProjectCreate,
     RetentionPolicyUpdate,
@@ -985,143 +983,6 @@ def resolve_approval(
         )
         db.commit()
     return approval_dto(approval)
-
-
-def _selected_versions(db: Session, run: AgentRun) -> list[str]:
-    return run.pinned_config_json.get("source_version_ids", [])
-
-
-def search_evidence(
-    db: Session,
-    ctx: RuntimeContext,
-    project_id: str,
-    query: str,
-    limit: int = 8,
-    settings: Settings | None = None,
-) -> EvidenceBundle:
-    limit = max(1, min(limit, 100))
-    project = _project(db, ctx, project_id)
-    config = db.get(ProjectConfigVersion, project.current_config_version_id)
-    allowed = set(config.source_version_ids if config else [])
-    if not allowed:
-        return EvidenceBundle(
-            query=query,
-            retrieval_version="hybrid.v2",
-            passages=[],
-            gaps=["No selected source versions are available."],
-        )
-    terms = [t.lower() for t in re.findall(r"[\w-]{3,}", query)]
-    blocks = (
-        db.query(SourceBlock, Source)
-        .join(SourceVersion, SourceVersion.id == SourceBlock.source_version_id)
-        .join(Source, Source.id == SourceVersion.source_id)
-        .filter(
-            SourceBlock.workspace_id == ctx.workspace_id, SourceBlock.source_version_id.in_(allowed)
-        )
-        .all()
-    )
-    chunk_vectors = {
-        chunk.source_block_id: chunk.embedding_json
-        for chunk in db.query(SourceChunk)
-        .filter(
-            SourceChunk.workspace_id == ctx.workspace_id,
-            SourceChunk.source_version_id.in_(allowed),
-        )
-        .all()
-    }
-    query_vector = build_embedding_provider(settings).embed([query])[0]
-    vector_store = build_vector_index_store(db, settings)
-    semantic_scores = vector_store.search(
-        db,
-        workspace_id=ctx.workspace_id,
-        source_version_ids=sorted(allowed),
-        vector=query_vector,
-        limit=max(16, min(100, limit * 8)),
-    )
-    ranked: list[tuple[float, SourceBlock, Source]] = []
-    for block, source in blocks:
-        text = block.text.lower()
-        lexical_score = sum(1 for term in terms if term in text) / max(len(terms), 1)
-        block_vector = chunk_vectors.get(block.id)
-        raw_semantic_score = semantic_scores.get(block.id)
-        if raw_semantic_score is None:
-            raw_semantic_score = cosine_similarity(query_vector, block_vector) if block_vector else 0.0
-        semantic_score = max(0.0, raw_semantic_score)
-        score = hybrid_score(lexical_score, semantic_score)
-        if score > 0 and (lexical_score > 0 or raw_semantic_score >= 0.25):
-            ranked.append((score, block, source))
-    ranked.sort(key=lambda item: (-item[0], item[1].source_version_id, item[1].block_no, item[1].id))
-    candidate_limit = max(16, min(100, limit * 8))
-    rerank_candidates = ranked[:candidate_limit]
-    if rerank_candidates:
-        rerank_scores = build_reranker(settings).score(
-            query, [block.text[:5000] for _, block, _ in rerank_candidates]
-        )
-        ranked = [
-            (
-                combine_rerank_scores(base_score, rerank_scores[index]),
-                block,
-                source,
-            )
-            for index, (base_score, block, source) in enumerate(rerank_candidates)
-        ]
-        block_lookup = {block.id: (block, source) for block, source in blocks}
-        by_version: dict[str, list[tuple[SourceBlock, Source]]] = {}
-        for block, source in blocks:
-            by_version.setdefault(block.source_version_id, []).append((block, source))
-        for version_blocks in by_version.values():
-            version_blocks.sort(key=lambda item: (item[0].block_no, item[0].id))
-        ranked_ids = {block.id for _, block, _ in ranked}
-        for base_score, block, _source in ranked[: min(limit, 8)]:
-            if base_score < 0.35:
-                continue
-            version_blocks = by_version.get(block.source_version_id, [])
-            position = next(
-                (index for index, (candidate, _) in enumerate(version_blocks) if candidate.id == block.id),
-                None,
-            )
-            if position is None:
-                continue
-            for neighbor_position in (position - 1, position + 1):
-                if 0 <= neighbor_position < len(version_blocks):
-                    neighbor, neighbor_source = version_blocks[neighbor_position]
-                    if neighbor.id not in ranked_ids and neighbor.id in block_lookup:
-                        ranked.append((base_score * 0.55, neighbor, neighbor_source))
-                        ranked_ids.add(neighbor.id)
-    ranked.sort(key=lambda item: (-item[0], item[1].source_version_id, item[1].block_no, item[1].id))
-    deduped: list[tuple[float, SourceBlock, Source]] = []
-    seen_text: set[tuple[str, str]] = set()
-    for candidate in ranked:
-        normalized = re.sub(r"\s+", " ", candidate[1].text).strip().lower()
-        key = (candidate[1].source_version_id, normalized)
-        if key in seen_text:
-            continue
-        seen_text.add(key)
-        deduped.append(candidate)
-    passages: list[PassageOut] = []
-    for score, block, source in deduped[:limit]:
-        passages.append(
-            PassageOut(
-                passage_id=f"passage_{block.id}",
-                source_id=source.id,
-                source_version_id=block.source_version_id,
-                source_name=source.name,
-                page=block.page_no,
-                section_path=block.section_path,
-                block_id=block.id,
-                offsets={"start": 0, "end": len(block.text)},
-                text=block.text[:3000],
-                score=round(score, 4),
-            )
-        )
-    return EvidenceBundle(
-        query=query,
-        retrieval_version=(
-            "hybrid.pgvector.v2" if vector_store.backend_id == "pgvector" else "hybrid.v2"
-        ),
-        passages=passages,
-        gaps=[] if passages else ["No selected passage matched the request."],
-    )
 
 
 def enforce_run_budget(db: Session, ctx: RuntimeContext, run: AgentRun) -> bool:

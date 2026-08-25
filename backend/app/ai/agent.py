@@ -1,20 +1,28 @@
-"""Deep Agents provider runtime and factory seam."""
+"""Groundloom's single Deep Agents composition root.
+
+This module owns model, prompt, tool, middleware, skill, subagent, checkpoint,
+and streaming composition. Reusable policy primitives live in
+``groundloom_harness``; backend capabilities arrive through a typed adapter.
+"""
 
 from typing import Any
 
-from ...config import Settings
-from ..contracts import (
+from groundloom_harness import BudgetCounter
+from groundloom_harness.skills_backend import ReadOnlySkillBackend
+from groundloom_harness.streaming import consume_provider_stream
+
+from ..config import Settings
+from .contracts import (
     AgentDefinition,
     AgentRuntimeContext,
     CancelCheck,
     ProgressCallback,
     ToolContext,
 )
-from ..prompt_loader import load_prompt
-from ..state.checkpoints import build_checkpoint_provider
-from ..tools.registry import build_toolset
-from .local import AgentRuntime
-from .streaming import consume_provider_stream
+from .persistence.checkpoints import build_checkpoint_provider
+from .prompt_loader import load_prompt
+from .runtime.local import AgentRuntime
+from .tools.registry import build_toolset
 
 
 class DeepAgentsAgentRuntime(AgentRuntime):
@@ -31,14 +39,12 @@ class DeepAgentsAgentRuntime(AgentRuntime):
             raise RuntimeError(
                 "Install the pinned agent extra to use the Deep Agents runtime"
             ) from exc
-        self._create_deep_agent = create_deep_agent
+        self._create_deep_agent: Any = create_deep_agent
         register_harness_profile(
             settings.model_provider,
             HarnessProfile(
                 excluded_tools=frozenset(
                     {
-                        "ls",
-                        "read_file",
                         "write_file",
                         "edit_file",
                         "delete",
@@ -62,25 +68,22 @@ class DeepAgentsAgentRuntime(AgentRuntime):
         cancel_check: CancelCheck | None = None,
         max_tool_calls: int = 40,
     ) -> dict[str, Any]:
-        from ..middleware import build_middleware_stack
-        from ..subagents import build_subagents
+        from ..integrations.ai.services import GroundloomAgentServices
+        from .middleware import build_middleware_stack
+        from .subagents import build_subagents
 
-        scope = ToolContext(
-            db=db,
-            runtime_context=ctx,
-            project_id=project_id,
-            settings=self.settings,
-        )
+        service_factory = getattr(self, "_service_factory", GroundloomAgentServices)
+        services = service_factory(db, ctx, project_id, self.settings)
+        scope = ToolContext(services=services)
         toolset = build_toolset(scope)
+        skill_backend = ReadOnlySkillBackend(services)
         runtime_context: AgentRuntimeContext = {
             "workspace_id": ctx.workspace_id,
             "project_id": project_id,
-            "thread_key": thread_key,
-            "settings": self.settings,
-            "progress_callback": progress_callback,
-            "cancel_check": cancel_check,
-            "max_tool_calls": max(1, max_tool_calls),
-            "tool_calls_used": 0,
+            "thread_id": thread_key,
+            "event_sink": progress_callback,
+            "cancellation_check": cancel_check,
+            "tool_budget": BudgetCounter(max(1, max_tool_calls)),
         }
         model = self.settings.model_name
         if ":" not in model:
@@ -90,16 +93,18 @@ class DeepAgentsAgentRuntime(AgentRuntime):
             raise RuntimeError("The Deep Agents runtime requires the Postgres checkpoint backend")
 
         with checkpoint_provider.open() as checkpointer:
-            graph = self._create_deep_agent(
+            graph: Any = self._create_deep_agent(
                 model=model,
                 tools=list(toolset.all_tools),
                 system_prompt=load_prompt("primary_system.txt"),
                 middleware=build_middleware_stack(),
+                backend=skill_backend,
+                skills=["/skills/project/"],
                 context_schema=AgentRuntimeContext,
                 checkpointer=checkpointer,
                 interrupt_on={},
                 name=self.definition.name,
-                subagents=build_subagents(toolset),
+                subagents=build_subagents(toolset, skills=["/skills/project/"]),
             )
             config = {
                 "configurable": {"thread_id": thread_key},

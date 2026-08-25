@@ -6,6 +6,7 @@ from typing import Any
 ProgressCallback = Callable[[str, dict[str, Any]], None]
 CancelCheck = Callable[[], bool]
 
+
 def _message_value(message: Any, key: str, default: Any = None) -> Any:
     if isinstance(message, dict):
         return message.get(key, default)
@@ -83,9 +84,7 @@ def consume_provider_stream(
     emitted_tool_completions: set[str] = set()
     cancelled = False
 
-    def remember_messages(
-        values: Any, target: list[Any], positions: dict[str, int]
-    ) -> list[Any]:
+    def remember_messages(values: Any, target: list[Any], positions: dict[str, int]) -> list[Any]:
         if not isinstance(values, (list, tuple)):
             return []
         normalized = list(values)
@@ -144,19 +143,25 @@ def consume_provider_stream(
                     name = _tool_name(call)
                     emit("tool.started", {"tool_name": name, "call_id": call_id, "node": node})
                     if name == "task":
-                        emit("subagent.started", {"tool_name": name, "call_id": call_id, "node": node})
+                        emit(
+                            "subagent.started",
+                            {"tool_name": name, "call_id": call_id, "node": node},
+                        )
                 if _message_type(message) == "tool":
                     call_id = _tool_call_id(message) or f"{node}:tool"
                     if call_id not in emitted_tool_completions:
                         emitted_tool_completions.add(call_id)
                         name = _tool_name(message)
-                        emit("tool.completed", {"tool_name": name, "call_id": call_id, "node": node})
+                        emit(
+                            "tool.completed", {"tool_name": name, "call_id": call_id, "node": node}
+                        )
                         if name == "task":
-                            emit("subagent.completed", {"tool_name": name, "call_id": call_id, "node": node})
+                            emit(
+                                "subagent.completed",
+                                {"tool_name": name, "call_id": call_id, "node": node},
+                            )
 
     state["messages"] = messages or streamed_messages
     if cancelled:
         state["cancelled"] = True
     return state
-
-

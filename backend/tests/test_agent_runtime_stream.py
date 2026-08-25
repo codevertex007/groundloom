@@ -1,6 +1,6 @@
 from types import SimpleNamespace
 
-from app.ai.runtime.streaming import consume_provider_stream
+from groundloom_harness.streaming import consume_provider_stream
 
 
 def test_provider_stream_projects_bounded_tool_and_subagent_progress():
@@ -25,14 +25,19 @@ def test_provider_stream_projects_bounded_tool_and_subagent_progress():
             {
                 "tools": {
                     "messages": [
-                        SimpleNamespace(id="tool-1", type="tool", tool_call_id="call-1", name="task")
+                        SimpleNamespace(
+                            id="tool-1", type="tool", tool_call_id="call-1", name="task"
+                        )
                     ]
                 }
             },
         ),
         (
             "messages",
-            (SimpleNamespace(id="ai-2", type="ai", content="private model text"), {"langgraph_node": "agent"}),
+            (
+                SimpleNamespace(id="ai-2", type="ai", content="private model text"),
+                {"langgraph_node": "agent"},
+            ),
         ),
         (
             "updates",
@@ -46,7 +51,9 @@ def test_provider_stream_projects_bounded_tool_and_subagent_progress():
         ),
     ]
 
-    result = consume_provider_stream(stream, progress_callback=lambda event, payload: events.append((event, payload)))
+    result = consume_provider_stream(
+        stream, progress_callback=lambda event, payload: events.append((event, payload))
+    )
 
     event_types = [event for event, _payload in events]
     assert "agent.progress" in event_types
@@ -55,7 +62,11 @@ def test_provider_stream_projects_bounded_tool_and_subagent_progress():
     assert "subagent.started" in event_types
     assert "subagent.completed" in event_types
     assert all("private model text" not in str(payload) for _event, payload in events)
-    assert [getattr(message, "id", None) for message in result["messages"]] == ["ai-1", "tool-1", "ai-2"]
+    assert [getattr(message, "id", None) for message in result["messages"]] == [
+        "ai-1",
+        "tool-1",
+        "ai-2",
+    ]
 
 
 def test_provider_stream_stops_between_chunks_when_cancelled():

@@ -22,7 +22,10 @@ A persistent central Deep Agent owns the adaptive semantic loop; typed tools, sc
 AI contribution boundaries are documented in
 [`docs/architecture/ai-contribution-boundary.md`](docs/architecture/ai-contribution-boundary.md):
 AI implementation lives under `backend/app/ai/` and `frontend/src/ai/`, with
-explicit runtime, middleware, tools, subagents, providers, and state folders;
+one `backend/app/ai/agent.py` composition root with capability-scoped retrieval,
+evaluation, tools, subagents, prompts, middleware configuration, and persistence;
+reusable Deep Agents mechanics live in `packages/groundloom-agent-harness/`;
+backend access is behind typed adapters in `backend/app/integrations/ai/`;
 system prompts are reviewed `.txt` assets rather than inline orchestration
 strings.
 
@@ -56,6 +59,16 @@ their environment variables from `.env.example`:
 ```powershell
 python -m pip install -e ".[dev,documents,postgres,agent,storage,observability]"
 ```
+
+AI contributors can also install and test the reusable mechanism package alone:
+
+```powershell
+python -m pip install -e "packages/groundloom-agent-harness[dev]"
+```
+
+The root editable install already includes this package. Deep Agents loads only
+published skill versions pinned to the active project through a read-only
+`/skills/project/` projection; it never receives the host filesystem.
 
 Set the provider SDK credential required by the selected model (`OPENAI_API_KEY`,
 `ANTHROPIC_API_KEY`, or `GOOGLE_API_KEY`) only in the runtime environment. A

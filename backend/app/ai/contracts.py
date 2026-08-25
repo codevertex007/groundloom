@@ -1,13 +1,18 @@
 """Shared contracts between the AI harness and deterministic product services."""
 
-from collections.abc import Callable
 from dataclasses import dataclass
-from typing import Any, TypedDict
+from typing import TypedDict
 
-from ..config import Settings
+from groundloom_harness import (
+    BudgetCounter,
+    CancellationCheck,
+    EventSink,
+)
 
-ProgressCallback = Callable[[str, dict[str, Any]], None]
-CancelCheck = Callable[[], bool]
+from .ports import AgentServicePort
+
+ProgressCallback = EventSink
+CancelCheck = CancellationCheck
 
 
 class AgentRuntimeContext(TypedDict):
@@ -15,22 +20,17 @@ class AgentRuntimeContext(TypedDict):
 
     workspace_id: str
     project_id: str
-    thread_key: str
-    settings: Settings
-    progress_callback: ProgressCallback | None
-    cancel_check: CancelCheck | None
-    max_tool_calls: int
-    tool_calls_used: int
+    thread_id: str
+    event_sink: EventSink | None
+    cancellation_check: CancellationCheck | None
+    tool_budget: BudgetCounter
 
 
 @dataclass(frozen=True)
 class ToolContext:
     """Authorized service handles captured when the graph's tools are built."""
 
-    db: Any
-    runtime_context: Any
-    project_id: str
-    settings: Settings
+    services: AgentServicePort
 
 
 @dataclass(frozen=True)

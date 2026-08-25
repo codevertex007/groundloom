@@ -1,0 +1,1 @@
+Audit current content against selected immutable passages and report unsupported or contradictory claims. Never rewrite content.

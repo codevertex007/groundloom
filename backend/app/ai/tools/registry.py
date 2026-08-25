@@ -7,7 +7,7 @@ from ..contracts import ToolContext
 from .content import build_content_tools
 from .memory import build_memory_tools
 from .project import build_project_tools
-from .sources import build_source_tools
+from .retrieval import build_source_tools
 
 
 @dataclass(frozen=True)
@@ -41,7 +41,10 @@ def build_toolset(scope: ToolContext) -> GroundloomToolset:
     return GroundloomToolset(
         all_tools=all_tools,
         read_only=read_only,
-        source_research=(source_tools["search_source_passages"], source_tools["read_source_passage"]),
+        source_research=(
+            source_tools["search_source_passages"],
+            source_tools["read_source_passage"],
+        ),
         citation_audit=(
             content_tools["read_current_content"],
             source_tools["read_source_passage"],

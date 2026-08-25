@@ -1,0 +1,1 @@
+Draft a bounded module from supplied evidence and propose a reviewable patch; never commit canonical content.

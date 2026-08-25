@@ -33,7 +33,14 @@ def checkpoint_path(settings: Settings, workspace_id: str, project_id: str, thre
     workspace = _safe_part(workspace_id, "workspace")
     project = _safe_part(project_id, "project")
     thread = _safe_part(thread_id, "thread")
-    return settings.object_store_path / "workspaces" / workspace / "checkpoints" / project / f"{thread}.json"
+    return (
+        settings.object_store_path
+        / "workspaces"
+        / workspace
+        / "checkpoints"
+        / project
+        / f"{thread}.json"
+    )
 
 
 def save_checkpoint(
@@ -115,11 +122,5 @@ def build_checkpoint_provider(settings: Settings) -> PostgresCheckpointProvider 
     if settings.checkpoint_backend == "local":
         return None
     if settings.checkpoint_backend == "postgres":
-        return PostgresCheckpointProvider(
-            settings.worker_database_url or settings.database_url
-        )
+        return PostgresCheckpointProvider(settings.worker_database_url or settings.database_url)
     raise RuntimeError(f"Unsupported checkpoint backend: {settings.checkpoint_backend}")
-
-
-
-

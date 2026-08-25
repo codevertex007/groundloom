@@ -9,10 +9,9 @@ import math
 from dataclasses import dataclass
 from typing import Protocol
 
-import httpx
-
 from ...config import Settings
 from ...errors import GroundloomError
+from ..common import post_provider_json
 from ..prompt_loader import load_prompt
 
 
@@ -92,46 +91,26 @@ class OpenAICompatibleSemanticGrader:
             "text": text[:20_000],
             "citations": citations[:100],
         }
+        body = post_provider_json(
+            endpoint,
+            api_key=self.api_key,
+            payload={
+                "model": self.model,
+                "temperature": 0,
+                "response_format": {"type": "json_object"},
+                "messages": [
+                    {
+                        "role": "system",
+                        "content": load_prompt("evaluator_system.txt"),
+                    },
+                    {"role": "user", "content": json.dumps(prompt, separators=(",", ":"))},
+                ],
+            },
+            timeout_seconds=self.timeout_seconds,
+            dependency_name="semantic evaluator",
+        )
         try:
-            response = httpx.post(
-                endpoint,
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json={
-                    "model": self.model,
-                    "temperature": 0,
-                    "response_format": {"type": "json_object"},
-                    "messages": [
-                        {
-                            "role": "system",
-                            "content": load_prompt("evaluator_system.txt"),
-                        },
-                        {"role": "user", "content": json.dumps(prompt, separators=(",", ":"))},
-                    ],
-                },
-                timeout=self.timeout_seconds,
-            )
-        except httpx.HTTPError as exc:
-            raise GroundloomError(
-                "DEPENDENCY_UNAVAILABLE",
-                "The semantic evaluator is temporarily unavailable.",
-                503,
-                retryable=True,
-            ) from exc
-        if response.status_code >= 500:
-            raise GroundloomError(
-                "DEPENDENCY_UNAVAILABLE",
-                "The semantic evaluator is temporarily unavailable.",
-                503,
-                retryable=True,
-            )
-        if response.status_code >= 400:
-            raise GroundloomError(
-                "PROVIDER_REJECTED",
-                "The semantic evaluator rejected the request.",
-                422,
-            )
-        try:
-            content = response.json()["choices"][0]["message"]["content"]
+            content = body["choices"][0]["message"]["content"]
             result = json.loads(content) if isinstance(content, str) else content
             score = float(result["score"])
             verdict = str(result["verdict"])
@@ -145,7 +124,14 @@ class OpenAICompatibleSemanticGrader:
                 or any(not isinstance(item, str) or len(item) > 500 for item in feedback)
             ):
                 raise ValueError("invalid evaluator result")
-        except (AttributeError, IndexError, KeyError, TypeError, ValueError, json.JSONDecodeError) as exc:
+        except (
+            AttributeError,
+            IndexError,
+            KeyError,
+            TypeError,
+            ValueError,
+            json.JSONDecodeError,
+        ) as exc:
             raise GroundloomError(
                 "PROVIDER_INVALID_RESPONSE",
                 "The semantic evaluator returned an invalid result.",
@@ -202,5 +188,3 @@ def run_evaluation_cases(
         "failed": len(results) - passed,
         "results": results,
     }
-
-

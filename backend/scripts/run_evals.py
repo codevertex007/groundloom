@@ -2,7 +2,7 @@
 
 import json
 
-from app.ai.providers.evaluation import (
+from app.ai.evaluation.providers import (
     DeterministicSemanticGrader,
     RubricVersion,
     run_evaluation_cases,

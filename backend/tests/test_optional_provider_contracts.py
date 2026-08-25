@@ -1,7 +1,10 @@
 from contextlib import contextmanager
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from groundloom_harness import BudgetCounter
+from groundloom_harness.skills_backend import ReadOnlySkillBackend, SkillPackage
 
 
 def test_pinned_deepagents_graph_compiles_without_provider_credentials():
@@ -33,8 +36,8 @@ def test_pinned_deepagents_graph_compiles_without_provider_credentials():
 def test_groundloom_deepagents_runtime_builds_scoped_harness_without_credentials(monkeypatch):
     deepagents = pytest.importorskip("deepagents")
     fake_models = pytest.importorskip("langchain_core.language_models.fake_chat_models")
-    from app.ai.runtime import provider as runtime_provider
-    from app.ai.runtime.provider import DeepAgentsAgentRuntime
+    from app.ai import agent as runtime_provider
+    from app.ai.agent import DeepAgentsAgentRuntime
     from app.config import Settings
 
     settings = Settings(
@@ -43,6 +46,23 @@ def test_groundloom_deepagents_runtime_builds_scoped_harness_without_credentials
         checkpoint_backend="postgres",
     )
     runtime = DeepAgentsAgentRuntime(settings)
+
+    class FakeServices:
+        def list_packages(self):
+            return (
+                SkillPackage(
+                    "provider-probe",
+                    "---\nname: provider-probe\ndescription: Provider probe.\n---\n\n# Probe",
+                ),
+            )
+
+        def __getattr__(self, name):
+            def result(*_args, **_kwargs):
+                return [] if name in {"project_skills", "read_workspace_memory"} else {}
+
+            return result
+
+    runtime._service_factory = lambda *_args: FakeServices()
 
     class FakeCheckpointProvider:
         @contextmanager
@@ -61,6 +81,8 @@ def test_groundloom_deepagents_runtime_builds_scoped_harness_without_credentials
                 return self
 
         kwargs["model"] = ToolCapableFakeModel(responses=["bounded harness response"])
+        assert kwargs["skills"] == ["/skills/project/"]
+        assert all(spec["skills"] == ["/skills/project/"] for spec in kwargs["subagents"])
         compiled = deepagents.create_deep_agent(**kwargs)
         assert type(compiled).__name__ == "CompiledStateGraph"
         actual = compiled.invoke(
@@ -69,12 +91,10 @@ def test_groundloom_deepagents_runtime_builds_scoped_harness_without_credentials
             context={
                 "workspace_id": "workspace-1",
                 "project_id": "project-1",
-                "thread_key": "probe-thread",
-                "settings": settings,
-                "progress_callback": None,
-                "cancel_check": None,
-                "max_tool_calls": 4,
-                "tool_calls_used": 0,
+                "thread_id": "probe-thread",
+                "event_sink": None,
+                "cancellation_check": None,
+                "tool_budget": BudgetCounter(4),
             },
         )
         assert actual["messages"][-1].content == "bounded harness response"
@@ -100,8 +120,8 @@ def test_groundloom_deepagents_runtime_builds_scoped_harness_without_credentials
 
 def test_groundloom_deepagents_runtime_projects_provider_stream(monkeypatch):
     pytest.importorskip("deepagents")
-    from app.ai.runtime import provider as runtime_provider
-    from app.ai.runtime.provider import DeepAgentsAgentRuntime
+    from app.ai import agent as runtime_provider
+    from app.ai.agent import DeepAgentsAgentRuntime
     from app.config import Settings
 
     settings = Settings(
@@ -110,6 +130,18 @@ def test_groundloom_deepagents_runtime_projects_provider_stream(monkeypatch):
         checkpoint_backend="postgres",
     )
     runtime = DeepAgentsAgentRuntime(settings)
+
+    class FakeServices:
+        def list_packages(self):
+            return ()
+
+        def __getattr__(self, name):
+            def result(*_args, **_kwargs):
+                return [] if name in {"project_skills", "read_workspace_memory"} else {}
+
+            return result
+
+    runtime._service_factory = lambda *_args: FakeServices()
 
     class FakeCheckpointProvider:
         @contextmanager
@@ -148,7 +180,10 @@ def test_groundloom_deepagents_runtime_projects_provider_stream(monkeypatch):
                     "tools": {
                         "messages": [
                             SimpleNamespace(
-                                id="tool-1", type="tool", tool_call_id="call-1", name="search_source_passages"
+                                id="tool-1",
+                                type="tool",
+                                tool_call_id="call-1",
+                                name="search_source_passages",
                             )
                         ]
                     }
@@ -173,3 +208,62 @@ def test_groundloom_deepagents_runtime_projects_provider_stream(monkeypatch):
     assert result["messages"][-1].id == "tool-1"
     assert [event for event, _payload in events].count("tool.started") == 1
     assert [event for event, _payload in events].count("tool.completed") == 1
+
+
+def test_published_project_skill_is_projected_as_native_skill_md(tmp_path: Path):
+    pytest.importorskip("deepagents")
+    from app.config import Settings
+    from app.context import RuntimeContext
+    from app.integrations.ai.services import GroundloomAgentServices
+    from app.main import create_app
+    from fastapi.testclient import TestClient
+
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'skills.db'}",
+        object_store_path=tmp_path / "objects",
+    )
+    app = create_app(settings)
+    headers = {"X-User-ID": "local-user", "X-Workspace-ID": "local-workspace"}
+    with TestClient(app) as api:
+        version = api.post(
+            "/v1/skills",
+            headers=headers,
+            json={
+                "slug": "project-guidance",
+                "name": "Project guidance",
+                "description": "Apply selected project guidance.",
+                "content": "# Rules\n\nCite every factual claim.",
+            },
+        ).json()
+        assert api.post(
+            f"/v1/skill-versions/{version['id']}/validate", headers=headers
+        ).status_code == 200
+        assert api.post(
+            f"/v1/skill-versions/{version['id']}/publish", headers=headers
+        ).status_code == 200
+        project = api.post(
+            "/v1/projects",
+            headers=headers,
+            json={
+                "name": "Skill projection",
+                "project_type": "brief",
+                "brief": "Use selected guidance.",
+                "skill_version_ids": [version["id"]],
+            },
+        ).json()
+
+    context = RuntimeContext(
+        "local-user",
+        "local-workspace",
+        frozenset({"workspace_admin"}),
+        "skill-projection-test",
+    )
+    with app.state.session_factory() as db:
+        services = GroundloomAgentServices(db, context, project["id"], settings)
+        packages = services.list_packages()
+        assert [package.slug for package in packages] == ["project-guidance"]
+        backend = ReadOnlySkillBackend(services)
+        skill_md = backend.read("/skills/project/project-guidance/SKILL.md")
+        assert skill_md.error is None
+        assert "name: project-guidance" in skill_md.file_data["content"]
+        assert "Cite every factual claim." in skill_md.file_data["content"]

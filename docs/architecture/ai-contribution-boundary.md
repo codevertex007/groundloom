@@ -7,18 +7,26 @@ keeping one integrated product contract.
 
 | Area | AI engineering owns | Backend/product engineering owns |
 |---|---|---|
-| Agent runtime | `backend/app/ai/runtime/`, `middleware/`, `state/`, provider harness wiring, stream projection | Authorization context, service contracts, persistence, jobs, approvals, canonical writes |
+| Reusable harness | `packages/groundloom-agent-harness/`: budgets, policy middleware, cancellation, safe events/streaming, read-only skill backend | No Groundloom imports or product authority |
+| Agent composition | `backend/app/ai/agent.py`, `middleware/`, `runtime/`, `persistence/`, tools and subagents | Authorized `backend/app/integrations/ai/` implementations, jobs, approvals, canonical writes |
 | Prompt assets | `backend/app/ai/prompts/*.txt`, reviewed and versioned with the runtime | Prompt version provenance and release/configuration validation |
-| Retrieval/evaluation | `backend/app/ai/providers/embeddings.py`, `reranking.py`, `evaluation.py` and their provider tests | Source scope, citation lineage, derived-index lifecycle, deterministic validation invariants |
+| Retrieval/evaluation | `backend/app/ai/retrieval/`, `evaluation/`, and `common/provider_http.py` | Source scope and SQL repository in `backend/app/integrations/ai/`; citation lineage, derived-index lifecycle, deterministic validation invariants |
 | AI frontend | `frontend/src/ai/` focused agent/activity and AI skill-author components | Screen composition, API transport, canonical state and permissions |
 
-There are no flat AI compatibility modules in `app/`. Backend services import
-the explicit AI contracts under `app.ai`; deterministic product services remain
-outside that package and must not duplicate provider behavior.
+There are no flat AI compatibility modules or obsolete import shims in `app/`.
+Model-facing tools use `AgentServicePort` and never import the product service
+module. The backend adapter binds trusted workspace/project context and is the
+only bridge to persistence. `agent.py` is the only Deep Agents composition root.
+
+Selected immutable skill versions are exposed to Deep Agents through a bounded
+read-only `/skills/project/` backend. `read_file` and `ls` are retained for this
+purpose; filesystem writes, edits, deletion, search outside the projection, and
+execution are unavailable.
 
 ## Prompt contract
 
-System prompts are UTF-8 `.txt` package assets. `app.ai.prompt_loader.load_prompt`
+System prompts and subagent description text are UTF-8 `.txt` package assets.
+`app.ai.prompt_loader.load_prompt`
 allows only registered exact filenames, rejects empty assets, and loads them
 through `importlib.resources` so source-tree and installed-package behavior
 match. Prompt assets are included in the Python package data and their runtime

@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=69"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "groundloom-agent-harness"
+version = "0.1.0"
+description = "Reusable, policy-first components for Deep Agents applications"
+requires-python = ">=3.11"
+dependencies = [
+  "deepagents>=0.7.8,<0.8",
+]
+
+[project.optional-dependencies]
+dev = ["pytest>=8,<9", "ruff>=0.8,<1", "mypy>=1.13,<2"]
+
+[tool.setuptools.packages.find]
+where = ["src"]

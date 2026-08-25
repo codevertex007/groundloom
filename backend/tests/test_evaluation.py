@@ -2,7 +2,7 @@ import json
 
 import httpx
 import pytest
-from app.ai.providers.evaluation import (
+from app.ai.evaluation.providers import (
     DeterministicSemanticGrader,
     OpenAICompatibleSemanticGrader,
     RubricVersion,
@@ -70,9 +70,7 @@ def test_openai_compatible_semantic_grader_validates_structured_output(monkeypat
         base_url="https://grader.example/v1",
         model="grader-test",
     )
-    grade = grader.grade(
-        "Grounded evidence text", ["passage_1"], RubricVersion("rubric-v1")
-    )
+    grade = grader.grade("Grounded evidence text", ["passage_1"], RubricVersion("rubric-v1"))
     assert grade.score == 0.87
     assert grade.verdict == "pass"
     assert calls[0][0] == "https://grader.example/v1/chat/completions"
@@ -89,7 +87,9 @@ def test_openai_compatible_semantic_grader_validates_structured_output(monkeypat
 
 
 def test_semantic_grader_outage_and_missing_configuration_are_typed(monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: (_ for _ in ()).throw(httpx.ConnectError("secret")))
+    monkeypatch.setattr(
+        httpx, "post", lambda *_args, **_kwargs: (_ for _ in ()).throw(httpx.ConnectError("secret"))
+    )
     grader = OpenAICompatibleSemanticGrader(
         api_key="secret-do-not-log",
         base_url="https://grader.example/v1",

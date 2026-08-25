@@ -12,10 +12,9 @@ import re
 from dataclasses import dataclass
 from typing import Protocol
 
-import httpx
-
-from ...config import Settings
-from ...errors import GroundloomError
+from ....config import Settings
+from ....errors import GroundloomError
+from ...common import post_provider_json
 
 
 class Reranker(Protocol):
@@ -66,47 +65,32 @@ class CohereCompatibleReranker:
         endpoint = self.base_url.rstrip("/")
         if not endpoint.endswith("/rerank"):
             endpoint = f"{endpoint}/rerank"
-        try:
-            response = httpx.post(
-                endpoint,
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json={
-                    "model": self.model,
-                    "query": query,
-                    "documents": documents,
-                    "top_n": len(documents),
-                    "return_documents": False,
-                },
-                timeout=self.timeout_seconds,
-            )
-        except httpx.HTTPError as exc:
-            raise GroundloomError(
-                "DEPENDENCY_UNAVAILABLE",
-                "The reranker is temporarily unavailable.",
-                503,
-                retryable=True,
-            ) from exc
-        if response.status_code >= 500:
-            raise GroundloomError(
-                "DEPENDENCY_UNAVAILABLE",
-                "The reranker is temporarily unavailable.",
-                503,
-                retryable=True,
-            )
-        if response.status_code >= 400:
-            raise GroundloomError(
-                "PROVIDER_REJECTED",
-                "The reranker rejected the request.",
-                422,
-            )
+        body = post_provider_json(
+            endpoint,
+            api_key=self.api_key,
+            payload={
+                "model": self.model,
+                "query": query,
+                "documents": documents,
+                "top_n": len(documents),
+                "return_documents": False,
+            },
+            timeout_seconds=self.timeout_seconds,
+            dependency_name="reranker",
+        )
         scores = [0.0] * len(documents)
         try:
-            records = response.json().get("results", [])
+            records = body.get("results", [])
             seen: set[int] = set()
             for record in records:
                 index = int(record["index"])
                 score = float(record["relevance_score"])
-                if index < 0 or index >= len(documents) or index in seen or not math.isfinite(score):
+                if (
+                    index < 0
+                    or index >= len(documents)
+                    or index in seen
+                    or not math.isfinite(score)
+                ):
                     raise ValueError("invalid reranker result")
                 seen.add(index)
                 scores[index] = max(0.0, min(1.0, score))
@@ -149,7 +133,3 @@ def build_reranker(settings: Settings | None = None) -> Reranker:
 def combine_rerank_scores(base_score: float, rerank_score: float) -> float:
     """Blend bounded candidate and reranker scores without changing rank bounds."""
     return max(0.0, min(1.0, 0.7 * max(0.0, min(1.0, base_score)) + 0.3 * rerank_score))
-
-
-
-

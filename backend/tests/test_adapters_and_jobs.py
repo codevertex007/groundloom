@@ -3,7 +3,7 @@ import json
 from pathlib import Path
 
 import pytest
-from app.ai.state.checkpoints import PostgresCheckpointProvider, build_checkpoint_provider
+from app.ai.persistence.checkpoints import PostgresCheckpointProvider, build_checkpoint_provider
 from app.auth import issue_context_token
 from app.config import Settings
 from app.context import RuntimeContext
@@ -329,7 +329,7 @@ def test_local_backup_manifest_verifies_database_and_objects(tmp_path: Path):
     objects = tmp_path / "objects"
     objects.mkdir()
     database.write_bytes(b"sqlite fixture")
-    (objects / "workspace" ).mkdir()
+    (objects / "workspace").mkdir()
     (objects / "workspace" / "artifact.bin").write_bytes(b"artifact")
     backup = tmp_path / "backup"
     backup.mkdir()

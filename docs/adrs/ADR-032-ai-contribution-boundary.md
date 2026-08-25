@@ -1,6 +1,6 @@
 # ADR-032: AI contribution boundary and externalized prompts
 
-- Status: Accepted
+- Status: Superseded by ADR-033
 - Date: 2026-08-25
 
 ## Context

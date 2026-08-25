@@ -14,3 +14,16 @@ Initial tool registry:
 | `TOOL-MEM-001 read_workspace_memory` | Read | Approved user-scoped memory |
 
 Each implementation defines Pydantic input/output, runtime-context scope, maximum result, timeout/retry, errors, idempotency, event/trace metadata, and approval behavior. Commit actions `accept_patch`, `publish_skill`, and direct artifact publication are deliberately not available to the primary agent.
+
+Model-facing tool factories depend only on `app.ai.ports.AgentServicePort`.
+`app.integrations.ai.services.GroundloomAgentServices` binds an authorized
+workspace/project context and implements the port; tool arguments can narrow
+scope but cannot supply or broaden tenant scope. Retrieval is implemented by
+`app.ai.retrieval.service` and exposed as `TOOL-RET-001..002` from
+`app.ai.tools.retrieval`.
+
+Deep Agents' built-in `ls` and `read_file` tools may read only the immutable
+`/skills/project/<slug>/` projection containing selected published skill
+versions. `write_file`, `edit_file`, `delete`, `execute`, and unrestricted
+filesystem search are excluded and denied by the backend even if invoked
+outside the model-visible tool set.

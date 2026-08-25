@@ -1,16 +1,16 @@
 """Ordered middleware assembly for the primary project agent."""
 
-from typing import Any
+from groundloom_harness import ToolPolicy
+from groundloom_harness.middleware import build_harness_middleware
+from langchain.agents.middleware import AgentMiddleware
 
-from .progress import ProgressMiddleware
-from .safety import GroundloomPolicyMiddleware, ToolBudgetMiddleware
+from ..prompt_loader import load_prompt
 
 
-def build_middleware_stack() -> list[Any]:
+def build_middleware_stack() -> list[AgentMiddleware]:
     """Return the explicit application middleware stack passed to Deep Agents."""
 
-    return [
-        GroundloomPolicyMiddleware(),
-        ToolBudgetMiddleware(),
-        ProgressMiddleware(),
-    ]
+    return build_harness_middleware(
+        ToolPolicy(),
+        load_prompt("middleware_policy.txt"),
+    )

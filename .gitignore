@@ -8,6 +8,7 @@ __pycache__/
 htmlcov/
 backend/.groundloom/
 backend/data/
+backend/**/data/
 backend/.env
 .env
 frontend/node_modules/

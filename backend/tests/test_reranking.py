@@ -1,6 +1,6 @@
 import httpx
 import pytest
-from app.ai.providers.reranking import (
+from app.ai.retrieval.providers.reranking import (
     CohereCompatibleReranker,
     DeterministicReranker,
     build_reranker,
@@ -64,7 +64,9 @@ def test_cohere_compatible_reranker_orders_and_validates_response(monkeypatch):
 
 
 def test_reranker_outage_and_missing_configuration_are_typed(monkeypatch):
-    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: (_ for _ in ()).throw(httpx.ConnectError("secret")))
+    monkeypatch.setattr(
+        httpx, "post", lambda *_args, **_kwargs: (_ for _ in ()).throw(httpx.ConnectError("secret"))
+    )
     reranker = CohereCompatibleReranker(
         api_key="secret-do-not-log",
         base_url="https://rerank.example/v1",

@@ -1,7 +1,6 @@
-"""Groundloom AI harness package.
+"""Groundloom-specific AI capabilities and the Deep Agents composition root.
 
-The package is intentionally organized by Deep Agents concern: runtime,
-middleware, scoped tools, subagents, providers, prompts, and execution state.
-Provider SDKs are imported lazily by the runtime so local mode stays credential
-free and importable.
+Reusable framework mechanics live in ``groundloom_harness``. This package owns
+Groundloom prompts, retrieval, evaluation, tools, subagents, and composition;
+backend persistence is accessed only through typed application ports.
 """

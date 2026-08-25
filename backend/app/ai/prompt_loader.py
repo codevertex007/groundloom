@@ -13,8 +13,11 @@ _PROMPT_NAMES = frozenset(
     {
         "primary_system.txt",
         "source_researcher_system.txt",
+        "source_researcher_description.txt",
         "citation_auditor_system.txt",
+        "citation_auditor_description.txt",
         "module_writer_system.txt",
+        "module_writer_description.txt",
         "evaluator_system.txt",
         "middleware_policy.txt",
     }

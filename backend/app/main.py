@@ -12,6 +12,7 @@ from .config import Settings, get_settings
 from .context import RuntimeContext, resolve_context
 from .db import build_session_factory, init_database, make_engine
 from .errors import GroundloomError
+from .integrations.ai.retrieval import search_evidence
 from .migrations import apply_migrations
 from .models import (
     AgentRun,
@@ -100,7 +101,6 @@ from .services import (
     request_project_deletion,
     resolve_approval,
     retry_delegated_task,
-    search_evidence,
     seed_local,
     start_run,
     update_retention_policy,

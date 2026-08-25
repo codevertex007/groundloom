@@ -9,6 +9,6 @@ def build_agent_runtime(provider: str, settings: Settings | None = None) -> Agen
         return LocalDeterministicAgentRuntime()
     if settings is None:
         raise RuntimeError("A validated Settings object is required for a production agent runtime")
-    from .provider import DeepAgentsAgentRuntime
+    from ..agent import DeepAgentsAgentRuntime
 
     return DeepAgentsAgentRuntime(settings)

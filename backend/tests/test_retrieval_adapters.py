@@ -1,6 +1,6 @@
 import httpx
 import pytest
-from app.ai.providers.embeddings import (
+from app.ai.retrieval.providers.embeddings import (
     DeterministicEmbeddingProvider,
     OpenAICompatibleEmbeddingProvider,
     build_embedding_provider,

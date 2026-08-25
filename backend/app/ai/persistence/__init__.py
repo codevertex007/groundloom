@@ -1,4 +1,4 @@
-"""AI execution state adapters."""
+"""AI execution persistence adapters."""
 
 from .checkpoints import (
     PostgresCheckpointProvider,

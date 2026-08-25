@@ -1,6 +1,6 @@
 import argparse
 
-from app.ai.state.checkpoints import setup_postgres_checkpoint_schema
+from app.ai.persistence.checkpoints import setup_postgres_checkpoint_schema
 from app.config import Settings
 from app.migrations import apply_migrations
 

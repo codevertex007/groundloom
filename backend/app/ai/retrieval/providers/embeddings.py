@@ -15,10 +15,9 @@ import re
 from dataclasses import dataclass
 from typing import Protocol
 
-import httpx
-
-from ...config import Settings
-from ...errors import GroundloomError
+from ....config import Settings
+from ....errors import GroundloomError
+from ...common import post_provider_json
 
 
 class EmbeddingProvider(Protocol):
@@ -88,35 +87,15 @@ class OpenAICompatibleEmbeddingProvider:
         endpoint = self.base_url.rstrip("/")
         if not endpoint.endswith("/embeddings"):
             endpoint = f"{endpoint}/embeddings"
+        body = post_provider_json(
+            endpoint,
+            api_key=self.api_key,
+            payload={"model": self.model, "input": texts},
+            timeout_seconds=self.timeout_seconds,
+            dependency_name="embedding provider",
+        )
         try:
-            response = httpx.post(
-                endpoint,
-                headers={"Authorization": f"Bearer {self.api_key}"},
-                json={"model": self.model, "input": texts},
-                timeout=self.timeout_seconds,
-            )
-        except httpx.HTTPError as exc:
-            raise GroundloomError(
-                "DEPENDENCY_UNAVAILABLE",
-                "The embedding provider is temporarily unavailable.",
-                503,
-                retryable=True,
-            ) from exc
-        if response.status_code >= 500:
-            raise GroundloomError(
-                "DEPENDENCY_UNAVAILABLE",
-                "The embedding provider is temporarily unavailable.",
-                503,
-                retryable=True,
-            )
-        if response.status_code >= 400:
-            raise GroundloomError(
-                "PROVIDER_REJECTED",
-                "The embedding provider rejected the request.",
-                422,
-            )
-        try:
-            records = response.json().get("data", [])
+            records = body.get("data", [])
             ordered = sorted(records, key=lambda item: int(item["index"]))
             vectors = [list(map(float, item["embedding"])) for item in ordered]
         except (AttributeError, KeyError, TypeError, ValueError) as exc:
@@ -174,7 +153,3 @@ def cosine_similarity(left: list[float] | None, right: list[float] | None) -> fl
 def hybrid_score(lexical_score: float, semantic_score: float) -> float:
     """Combine bounded lexical and semantic scores deterministically."""
     return max(0.0, min(1.0, 0.65 * lexical_score + 0.35 * max(0.0, semantic_score)))
-
-
-
-

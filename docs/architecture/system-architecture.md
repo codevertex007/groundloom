@@ -154,10 +154,13 @@ These can be separate processes from one repository. Do not begin with a fleet o
 
 Implementation ownership is split explicitly: AI runtime, middleware, scoped
 tools, subagents, providers, execution state, and prompt assets live under
-`backend/app/ai/`; focused agent UI lives under `frontend/src/ai/`; deterministic
+`backend/app/ai/`; reusable framework mechanics live in
+`packages/groundloom-agent-harness/`; focused agent UI lives under
+`frontend/src/ai/`; deterministic
 product services remain responsible for authorization, persistence, workers,
 and canonical commands. See the [AI contribution boundary](ai-contribution-boundary.md)
-and ADR-032 for the prompt asset and package-boundary contract.
+and ADR-033 for the reusable harness, skill projection, typed service port, and
+composition-root contract.
 
 Groundloom should expose one primary project-agent runtime plus a small registry of supporting agents and deterministic jobs.
 
@@ -1004,33 +1007,47 @@ The separate quality control plane already planned for recurring issues can cons
 backend/
   app/
     ai/
+      agent.py
       contracts.py
+      ports.py
+      common/provider_http.py
       runtime/
         factory.py
         local.py
-        provider.py
-        streaming.py
       middleware/
         builder.py
-        context.py
-        progress.py
-        safety.py
       tools/
         catalog.py
         registry.py
         project.py
-        sources.py
+        retrieval.py
         content.py
         memory.py
       subagents/
         specs.py
-      providers/
-        embeddings.py
-        reranking.py
-        evaluation.py
+      retrieval/
+        contracts.py
+        service.py
+        providers/{embeddings.py,reranking.py}
+      evaluation/providers.py
       prompts/*.txt
-      state/checkpoints.py
+      persistence/checkpoints.py
+    integrations/ai/
+      services.py
+      retrieval.py
     deterministic product services, persistence, workers, and API modules
+packages/
+  groundloom-agent-harness/
+    pyproject.toml
+    src/groundloom_harness/
+      budgets.py
+      cancellation.py
+      context.py
+      events.py
+      middleware.py
+      policy.py
+      skills_backend.py
+      streaming.py
     skills/
       parser.py
       validator.py

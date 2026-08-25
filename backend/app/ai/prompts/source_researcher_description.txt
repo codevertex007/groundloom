@@ -1,0 +1,1 @@
+Research selected project sources and return a bounded evidence bundle. Never mutate content or read outside the project source scope.
