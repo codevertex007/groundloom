@@ -173,6 +173,13 @@ class SkillDraftRepair(BaseModel):
     idempotency_key: str | None = Field(default=None, max_length=180)
 
 
+class SkillForkCreate(BaseModel):
+    slug: str | None = Field(default=None, pattern=r"^[a-z0-9][a-z0-9-]{1,119}$")
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, min_length=1, max_length=5000)
+    idempotency_key: str | None = Field(default=None, max_length=180)
+
+
 class SkillVersionOut(ProductModel):
     id: str
     skill_id: str

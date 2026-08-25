@@ -35,6 +35,14 @@ test("reference surfaces and connected mutations are present in the UI", () => {
     "/v1/approvals/",
     "/v1/patches/",
     "/v1/runs/",
+    "Active skills",
+    "skill_version_ids",
+    "/v1/skills/",
+    "/v1/source-versions/",
+    "source-row-actions",
+    "Versions",
+    "source_id",
+    "Fork to workspace",
     "Cancel run",
     "Resume run",
     "subscribeToEvents",
@@ -54,4 +62,5 @@ test("interactive reference states expose keyboard and assistive semantics", () 
   assert.match(source, /aria-expanded=\{open === skill\.id\}/);
   assert.match(source, /event\.key === "Enter" \|\| event\.key === " "/);
   assert.match(source, /aria-pressed=\{status !== "all"\}/);
+  assert.match(source, /Filter skills by scope/);
 });

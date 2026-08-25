@@ -155,3 +155,32 @@ def test_skill_repair_creates_immutable_version_then_validates_and_publishes(tmp
             )
             assert [version.version_no for version in versions] == [1, 2]
             assert versions[0].status == "invalid"
+
+
+def test_published_starter_skill_can_be_forked_into_scoped_workspace_draft(tmp_path):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'skill-fork.db'}",
+        object_store_path=tmp_path / "objects",
+    )
+    app = create_app(settings)
+    with TestClient(app) as api:
+        starter = next(
+            skill
+            for skill in api.get("/v1/skills", headers=headers()).json()
+            if skill["scope"] == "starter"
+        )
+        forked = api.post(
+            f"/v1/skills/{starter['id']}/fork",
+            headers={**headers(), "Idempotency-Key": "fork-once"},
+            json={"slug": "forked-starter"},
+        )
+        assert forked.status_code == 201
+        assert forked.json()["scope"] == "workspace"
+        assert forked.json()["status"] == "draft"
+        replay = api.post(
+            f"/v1/skills/{starter['id']}/fork",
+            headers={**headers(), "Idempotency-Key": "fork-once"},
+            json={"slug": "different-slug"},
+        )
+        assert replay.status_code == 201
+        assert replay.json()["id"] == forked.json()["id"]

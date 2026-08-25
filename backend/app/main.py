@@ -54,6 +54,7 @@ from .schemas import (
     SkillAuthorDraftCreate,
     SkillCreate,
     SkillDraftRepair,
+    SkillForkCreate,
     SkillVersionOut,
     SourceOut,
     UploadFinalize,
@@ -71,6 +72,7 @@ from .services import (
     create_skill,
     execute_agent_turn,
     export_content,
+    fork_skill,
     get_retention_policy,
     get_workspace_preferences,
     list_run_approvals,
@@ -686,6 +688,44 @@ def register_routes(app: FastAPI) -> FastAPI:
             "content_hash": version.content_hash,
             "scope": skill.scope,
         }
+
+    @app.post("/v1/skills/{skill_id}/fork", response_model=SkillVersionOut, status_code=201)
+    def skill_fork(
+        skill_id: str,
+        body: SkillForkCreate,
+        db: Session = Depends(get_db),
+        ctx: RuntimeContext = Depends(get_ctx),
+        idempotency_key: str | None = Header(default=None, alias="Idempotency-Key"),
+    ):
+        key = body.idempotency_key or idempotency_key
+        if key:
+            existing = db.query(IdempotencyRecord).filter_by(workspace_id=ctx.workspace_id, key=key).first()
+            if existing:
+                if existing.operation != "skill.fork":
+                    raise GroundloomError(
+                        "IDEMPOTENCY_CONFLICT",
+                        "The idempotency key was used for another operation.",
+                        409,
+                    )
+                return existing.response_json
+        version = fork_skill(db, ctx, skill_id, body)
+        skill = db.get(Skill, version.skill_id)
+        if skill is None:
+            raise GroundloomError("INTERNAL_ERROR", "The forked skill identity is missing.", 500)
+        response = {
+            "id": version.id,
+            "skill_id": version.skill_id,
+            "version_no": version.version_no,
+            "status": version.status,
+            "name": skill.name,
+            "slug": skill.slug,
+            "description": version.description,
+            "content_hash": version.content_hash,
+            "scope": skill.scope,
+        }
+        response = remember_idempotency(db, ctx, key, "skill.fork", response)
+        db.commit()
+        return response
 
     @app.put("/v1/skill-versions/{version_id}/repair", response_model=SkillVersionOut, status_code=201)
     def skill_repair(

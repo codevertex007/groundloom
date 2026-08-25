@@ -184,9 +184,10 @@ function App() {
         )}
       </main>
       {newProjectOpen && (
-        <NewProjectModal
-          sources={sources}
-          onClose={() => setNewProjectOpen(false)}
+          <NewProjectModal
+            sources={sources}
+            skills={skills}
+            onClose={() => setNewProjectOpen(false)}
           onCreated={async (project) => {
             setNewProjectOpen(false);
             await refresh();
@@ -364,6 +365,7 @@ function ProjectsScreen({ loading, projects, query, setQuery, onOpen, onNew }) {
 }
 
 function SourcesScreen({ sources, query, setQuery, onRefresh }) {
+  const [selected, setSelected] = useState(null);
   const shown = sources.filter((s) =>
     s.name.toLowerCase().includes(query.toLowerCase()),
   );
@@ -423,23 +425,70 @@ function SourcesScreen({ sources, query, setQuery, onRefresh }) {
                   {s.latest_status || "unknown"}
                 </span>
               </span>
-              <span className="muted">{fmt(s.versions[0]?.created_at)}</span>
+              <div className="source-row-actions">
+                <span className="muted">{fmt(s.versions[0]?.created_at)}</span>
+                <button
+                  className="soft-button compact"
+                  aria-label={`Open ${s.name} versions`}
+                  onClick={() => setSelected(s)}
+                >
+                  Versions
+                </button>
+              </div>
             </div>
           ))}
+        </div>
+      )}
+      {selected && (
+        <div className="modal-backdrop">
+          <div className="modal wide" role="dialog" aria-modal="true" aria-labelledby="source-versions-title">
+            <div className="modal-head">
+              <div>
+                <span className="eyebrow">IMMUTABLE SOURCE HISTORY</span>
+                <h2 id="source-versions-title">{selected.name}</h2>
+              </div>
+              <button
+                className="icon-button"
+                aria-label="Close source versions dialog"
+                onClick={() => setSelected(null)}
+              >
+                <X size={17} />
+              </button>
+            </div>
+            <div className="version-history">
+              {selected.versions.map((version) => (
+                <div className="version-row" key={version.id}>
+                  <span>v{version.version_no}</span>
+                  <span className={`status-pill ${version.status}`}>{version.status}</span>
+                  <span>{version.size_bytes.toLocaleString()} bytes</span>
+                  <span className="muted">{fmt(version.created_at)}</span>
+                </div>
+              ))}
+            </div>
+            <div className="modal-actions">
+              <UploadButton
+                sourceId={selected.id}
+                onUploaded={() => {
+                  setSelected(null);
+                  onRefresh();
+                }}
+              />
+            </div>
+          </div>
         </div>
       )}
     </section>
   );
 }
 
-function UploadButton({ onUploaded }) {
+function UploadButton({ onUploaded, sourceId = null }) {
   const upload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
     const reader = new FileReader();
     reader.onload = async () => {
       try {
-        await api("/v1/sources/uploads", {
+        await api(sourceId ? `/v1/sources/${sourceId}/versions` : "/v1/sources/uploads", {
           method: "POST",
           body: JSON.stringify({
             name: file.name.replace(/\.[^.]+$/, ""),
@@ -479,6 +528,7 @@ function SkillsScreen({ skills, onRefresh }) {
   });
   const [repair, setRepair] = useState(null);
   const [repairForm, setRepairForm] = useState({ description: "", content: "" });
+  const [scopeFilter, setScopeFilter] = useState("all");
   const [creating, setCreating] = useState(false);
   const [authoring, setAuthoring] = useState(false);
   const [busyAction, setBusyAction] = useState("");
@@ -567,12 +617,31 @@ function SkillsScreen({ skills, onRefresh }) {
       setBusyAction("");
     }
   };
+  const fork = async (skill) => {
+    setBusyAction(`fork:${skill.id}`);
+    setMessage("");
+    try {
+      await api(`/v1/skills/${skill.id}/fork`, {
+        method: "POST",
+        headers: { "Idempotency-Key": `ui-fork-${skill.id}-${crypto.randomUUID()}` },
+        body: JSON.stringify({}),
+      });
+      onRefresh();
+    } catch (e) {
+      setMessage(e.message);
+    } finally {
+      setBusyAction("");
+    }
+  };
+  const visibleSkills = skills.filter(
+    (skill) => scopeFilter === "all" || skill.scope === scopeFilter,
+  );
   return (
     <section className="page">
       <PageHeader
         eyebrow="HARNESS / INSTRUCTIONS"
         title="Skills"
-        meta={`${skills.length} packages`}
+        meta={`${visibleSkills.length}/${skills.length} packages`}
         action={
           <div className="header-actions">
             <button className="soft-button" onClick={() => setAuthoring(!authoring)}>
@@ -672,8 +741,20 @@ function SkillsScreen({ skills, onRefresh }) {
           </div>
         </div>
       )}
+      <div className="toolbar" role="group" aria-label="Filter skills by scope">
+        {["all", "starter", "organization", "workspace"].map((scope) => (
+          <button
+            className={`soft-button ${scopeFilter === scope ? "selected" : ""}`}
+            aria-pressed={scopeFilter === scope}
+            key={scope}
+            onClick={() => setScopeFilter(scope)}
+          >
+            {scope === "all" ? "All scopes" : scope}
+          </button>
+        ))}
+      </div>
       <div className="skill-list">
-        {skills.map((skill) => (
+        {visibleSkills.map((skill) => (
           <div
             className={`skill-card ${open === skill.id ? "expanded" : ""}`}
             key={skill.id}
@@ -720,6 +801,18 @@ function SkillsScreen({ skills, onRefresh }) {
                     </span>
                     <span>{v.description}</span>
                     <div className="version-actions">
+                      {skill.scope !== "workspace" && v.status === "published" && (
+                        <button
+                          className="soft-button compact"
+                          disabled={busyAction === `fork:${skill.id}`}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            fork(skill);
+                          }}
+                        >
+                          {busyAction === `fork:${skill.id}` ? "Forking…" : "Fork to workspace"}
+                        </button>
+                      )}
                       {(v.status === "draft" || v.status === "invalid") && (
                         <button
                           className="soft-button compact"
@@ -762,6 +855,13 @@ function SkillsScreen({ skills, onRefresh }) {
             )}
           </div>
         ))}
+        {visibleSkills.length === 0 && (
+          <EmptyState
+            icon={Sparkles}
+            title="No skills in this scope"
+            body="Choose another scope or create a workspace skill draft."
+          />
+        )}
       </div>
       {repair && (
         <div className="modal-backdrop">
@@ -963,6 +1063,20 @@ function Canvas({ project, sources, onBack, onRefresh }) {
       alert(e.message);
     }
   };
+  const openCitation = async (passageId) => {
+    for (const versionId of project.config.source_version_ids || []) {
+      try {
+        setCitation(
+          await api(`/v1/source-versions/${versionId}/passages/${passageId}`),
+        );
+        return;
+      } catch (_) {
+        // A passage ID is only meaningful within its immutable source version;
+        // try the other authorized pinned versions without broadening scope.
+      }
+    }
+    setMessage("This citation is no longer available in the project's pinned evidence.");
+  };
   const lastActivity = [...events]
     .reverse()
     .find((e) => e.type === "run.completed" || e.type === "artifact.delta");
@@ -1101,7 +1215,7 @@ function Canvas({ project, sources, onBack, onRefresh }) {
           {tab === "outline" ? (
             <OutlineView outline={outline} />
           ) : (
-            <ContentView content={content} onCitation={setCitation} />
+          <ContentView content={content} onCitation={openCitation} />
           )}
           {patches
             .filter((p) => p.status === "presented")
@@ -1284,13 +1398,7 @@ function ContentView({ content, onCitation }) {
                 className="citation"
                 key={citation}
                 onClick={() =>
-                  onCitation({
-                    passage_id: citation,
-                    source_name: "Source passage",
-                    text: "Open the source explorer to inspect this immutable passage.",
-                    page: null,
-                    score: 1,
-                  })
+                    onCitation(citation)
                 }
               >
                 ◉ cited
@@ -1370,12 +1478,13 @@ function CitationPanel({ citation, onClose }) {
   );
 }
 
-function NewProjectModal({ sources, onClose, onCreated }) {
+function NewProjectModal({ sources, skills, onClose, onCreated }) {
   const [form, setForm] = useState({
     name: "",
     project_type: "knowledge_brief",
     brief: "",
     source_version_ids: [],
+    skill_version_ids: [],
   });
   const [busy, setBusy] = useState(false);
   const submit = async () => {
@@ -1490,6 +1599,47 @@ function NewProjectModal({ sources, onClose, onCreated }) {
               <span className="muted">
                 Upload a source first, or continue with an evidence gap.
               </span>
+            )}
+          </span>
+        </label>
+        <label>
+          Active skills
+          <span className="select-list">
+            {skills
+              .map((skill) => ({
+                ...skill,
+                version: skill.versions?.find((version) => version.status === "published"),
+              }))
+              .filter((skill) => skill.version)
+              .map((skill) => (
+                <button
+                  type="button"
+                  className={
+                    form.skill_version_ids.includes(skill.version.id) ? "selected" : ""
+                  }
+                  aria-pressed={form.skill_version_ids.includes(skill.version.id)}
+                  onClick={() =>
+                    setForm({
+                      ...form,
+                      skill_version_ids: form.skill_version_ids.includes(skill.version.id)
+                        ? form.skill_version_ids.filter((id) => id !== skill.version.id)
+                        : [...form.skill_version_ids, skill.version.id],
+                    })
+                  }
+                  key={skill.id}
+                >
+                  <Sparkles size={14} />
+                  {skill.name}
+                  <small>{skill.scope}</small>
+                  <span>
+                    {form.skill_version_ids.includes(skill.version.id) ? <Check size={14} /> : ""}
+                  </span>
+                </button>
+              ))}
+            {skills.filter((skill) =>
+              skill.versions?.some((version) => version.status === "published"),
+            ).length === 0 && (
+              <span className="muted">Publish a skill first, or continue with the default harness.</span>
             )}
           </span>
         </label>

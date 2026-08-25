@@ -4,7 +4,7 @@
 
 - [x] `IMPL-07-001` Extract screen/route/component inventory from attached UI and map to contracts.
 - [x] `IMPL-07-002` Shared JSDoc-typed API client and explicit local auth/workspace headers; production identity integration remains deployment work.
-- [x] `IMPL-07-003` Projects/New Project/Sources/Skills screens and core states.
+- [x] `IMPL-07-003` Projects/New Project/Sources/Skills screens and core states, including active published-skill selection, scope filters/forking, and immutable source-version history/revision upload.
 - [x] `IMPL-07-004` Canvas outline/content/source explorer with block selection and citations.
 - [x] `IMPL-07-005` Primary-agent panel with replay-safe events, todos, subagents, approvals, and connected cancel/resume controls.
 - [x] `IMPL-07-006` Diff/review/accept/reject/conflict flows.
@@ -17,4 +17,4 @@
 - [x] `IMPL-07-009` Component, stable visual-regression, and full e2e suite; 3 component tests, 10 Playwright tests (9 semantic journeys plus the pinned visual-baseline test), committed Windows Chromium empty-state baselines, and serious/critical axe assertions pass. Non-Windows CI runs the semantic suite and skips the pinned pixel lane.
 
 ## Exit gate
-The reference surfaces are implemented against the real local backend. API-client reconnect/error automation, a static UI contract suite, actual React component rendering tests, 10 Playwright tests covering project creation, approval resume, proposal accept/reject, skills author/repair/publish, settings, command palette, dropped-stream reconnect, permission-denied rendering, sources/citations, visual stable states, and rendered serious/critical axe checks pass locally. ADR-023 records the pinned Windows visual lane and cross-platform semantic policy.
+The reference surfaces are implemented against the real local backend. API-client reconnect/error automation, a static UI contract suite, actual React component rendering tests, 10 Playwright tests covering project creation with active skill selection, approval resume, proposal accept/reject, skills scope filtering/forking/author/repair/publish, settings, command palette, dropped-stream reconnect, permission-denied rendering, source version history/revision upload, exact source citations, visual stable states, and rendered serious/critical axe checks pass locally. ADR-023 records the pinned Windows visual lane and cross-platform semantic policy.

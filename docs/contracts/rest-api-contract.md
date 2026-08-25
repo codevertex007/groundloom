@@ -50,3 +50,8 @@ Skill repair never edits an existing version. `PUT
 /skill-versions/{id}/repair` validates the caller's workspace scope, creates the
 next draft version for the same skill, records `repaired_from_version_id`, and
 accepts `Idempotency-Key`. Published bytes cannot be repaired in place.
+
+`POST /skills/{id}/fork` copies an authorized published starter, organization,
+or visible workspace skill into a new workspace-scoped draft. The fork never
+publishes automatically, accepts an optional replacement slug/name/description,
+and supports the same idempotent replay boundary.

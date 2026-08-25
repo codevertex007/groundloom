@@ -38,6 +38,10 @@ test("creates a project, runs the persistent collaborator, reviews, and accepts 
   await dialog
     .getByLabel("Project brief")
     .fill("Create a concise grounded guide for field operators.");
+  const activeSkill = dialog.locator(".select-list").nth(1).getByRole("button").first();
+  await expect(activeSkill).toBeVisible();
+  await activeSkill.click();
+  await expect(activeSkill).toHaveAttribute("aria-pressed", "true");
   await dialog
     .getByRole("button", { name: "Create project", exact: true })
     .click();
@@ -157,6 +161,15 @@ test("creates, validates, repairs, and publishes an AI-authored skill draft", as
   await page.goto("/");
   await page.getByRole("button", { name: "Skills", exact: true }).click();
   await expect(page.getByRole("heading", { name: "Skills", exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "starter", exact: true }).click();
+  const starterCard = page.locator(".skill-card").filter({ hasText: "Source-grounded writing" });
+  await expect(starterCard).toBeVisible();
+  await starterCard.click();
+  await starterCard.getByRole("button", { name: "Fork to workspace", exact: true }).click();
+  await page.getByRole("button", { name: "All scopes", exact: true }).click();
+  await expect(
+    page.locator(".skill-card").filter({ hasText: "Source-grounded writing (fork)" }),
+  ).toBeVisible();
   await page.getByRole("button", { name: "AI author draft", exact: true }).click();
   await page.getByLabel("Skill author objective").fill("Create scoped editorial guidance for grounded drafts.");
   const slug = `browser-skill-${Date.now()}`;
@@ -186,6 +199,7 @@ test("shows reconnect state after a dropped activity stream", async ({ page }) =
       await route.abort("connectionreset");
       return;
     }
+    await new Promise((resolve) => setTimeout(resolve, 1_000));
     await route.continue();
   });
   await page.goto("/");
@@ -249,6 +263,16 @@ test("uploads evidence, grounds a project, and navigates a citation", async ({
   });
   await expect(page.getByText("field-guide", { exact: true })).toBeVisible();
   await expect(page.getByText("ready", { exact: true })).toBeVisible();
+  await page.getByRole("button", { name: "Open field-guide versions", exact: true }).click();
+  const versions = page.getByRole("dialog", { name: "field-guide" });
+  await expect(versions.getByText("v1", { exact: true })).toBeVisible();
+  await expect(versions.getByRole("button", { name: /Upload source/ })).toBeVisible();
+  await versions.locator('input[type="file"]').setInputFiles({
+    name: "field-guide-revision.txt",
+    mimeType: "text/plain",
+    buffer: Buffer.from("Use 10 Nm for the service fastener. Inspect the seal before torqueing. Revised."),
+  });
+  await expect(page.getByText("v2", { exact: true })).toBeVisible();
 
   await page.getByRole("button", { name: "Projects", exact: true }).click();
   await page
@@ -277,4 +301,5 @@ test("uploads evidence, grounds a project, and navigates a citation", async ({
   await page.getByRole("button", { name: /^Content/ }).click();
   await page.getByRole("button", { name: /cited/ }).first().click();
   await expect(page.getByText("IMMUTABLE EVIDENCE", { exact: true })).toBeVisible();
+  await expect(page.getByText("Use 10 Nm for the service fastener.", { exact: false })).toBeVisible();
 });

@@ -70,6 +70,7 @@ from .schemas import (
     SkillAuthorDraftCreate,
     SkillCreate,
     SkillDraftRepair,
+    SkillForkCreate,
     UploadFinalize,
     WorkspacePreferencesUpdate,
 )
@@ -2347,6 +2348,55 @@ def author_skill_draft(
     audit(db, ctx, "skill.ai_draft.created", "skill_version", version.id, "Created draft-only skill author output")
     db.commit()
     return version
+
+
+def fork_skill(
+    db: Session, ctx: RuntimeContext, skill_id: str, body: SkillForkCreate
+) -> SkillVersion:
+    """Copy an authorized published package into a new workspace draft."""
+    ctx.require("fork skills", {"author", "reviewer", "workspace_admin", "organization_admin"})
+    source = (
+        db.query(Skill)
+        .filter(
+            Skill.id == skill_id,
+            (Skill.workspace_id == ctx.workspace_id) | (Skill.workspace_id.is_(None)),
+        )
+        .first()
+    )
+    if source is None:
+        raise GroundloomError("RESOURCE_NOT_FOUND", "The source skill was not found.", 404)
+    published = (
+        db.query(SkillVersion)
+        .filter_by(skill_id=source.id, status="published")
+        .order_by(SkillVersion.version_no.desc())
+        .first()
+    )
+    if published is None:
+        raise GroundloomError("INVALID_STATE", "Only a published skill can be forked.", 409)
+    content = published.package_json.get("content")
+    if not isinstance(content, str) or not content.strip():
+        raise GroundloomError("INVALID_STATE", "The published skill has no forkable content.", 409)
+    slug = body.slug or f"{source.slug}-fork"
+    name = body.name or f"{source.name} (fork)"
+    description = body.description or published.description
+    existing = (
+        db.query(Skill)
+        .filter_by(workspace_id=ctx.workspace_id, slug=slug)
+        .first()
+    )
+    if existing is not None:
+        raise GroundloomError("INVALID_INPUT", "A skill with this slug already exists in the workspace.", 422)
+    return create_skill(
+        db,
+        ctx,
+        SkillCreate(
+            slug=slug,
+            name=name,
+            description=description,
+            content=content,
+            scope="workspace",
+        ),
+    )
 
 
 def repair_skill_draft(

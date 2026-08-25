@@ -83,6 +83,42 @@ def test_project_create_is_idempotent(tmp_path):
     assert first.json()["id"] == second.json()["id"]
 
 
+def test_project_pins_selected_published_skill_version(tmp_path):
+    api = client(tmp_path)
+    skill = api.post(
+        "/v1/skills",
+        headers=headers(),
+        json={
+            "slug": "project-skill",
+            "name": "Project skill",
+            "description": "A project-specific guidance package",
+            "content": "Use selected evidence and cite factual claims.",
+        },
+    )
+    assert skill.status_code == 201
+    version_id = skill.json()["id"]
+    assert api.post(
+        f"/v1/skill-versions/{version_id}/validate", headers=headers()
+    ).status_code == 200
+    assert api.post(
+        f"/v1/skill-versions/{version_id}/publish", headers=headers()
+    ).status_code == 200
+    project = api.post(
+        "/v1/projects",
+        headers=headers(),
+        json={
+            "name": "Skill-pinned project",
+            "project_type": "brief",
+            "brief": "Use the selected project skill.",
+            "skill_version_ids": [version_id],
+        },
+    )
+    assert project.status_code == 201
+    detail = api.get(f"/v1/projects/{project.json()['id']}", headers=headers())
+    assert detail.status_code == 200
+    assert detail.json()["config"]["skill_version_ids"] == [version_id]
+
+
 def test_plan_approval_interrupt_resumes_same_run_and_thread(tmp_path):
     api = client(tmp_path)
     project = api.post(

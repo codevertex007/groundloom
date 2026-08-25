@@ -386,6 +386,17 @@ button {
   font-size: 11px;
   color: var(--muted);
 }
+.source-row-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.version-history {
+  display: grid;
+  gap: 8px;
+  margin: 10px 0 18px;
+}
 .source-name {
   display: flex;
   align-items: center;
@@ -449,6 +460,7 @@ button {
 .skill-card {
   position: relative;
   display: flex;
+  flex-wrap: wrap;
   align-items: flex-start;
   gap: 12px;
   padding: 15px;
@@ -512,10 +524,8 @@ button {
   transform: rotate(90deg);
 }
 .skill-detail {
-  position: absolute;
-  left: 56px;
-  right: 15px;
-  top: 75px;
+  flex: 0 0 calc(100% - 41px);
+  margin-left: 41px;
   border-top: 1px solid var(--border);
   padding-top: 12px;
   font-size: 10px;
