@@ -1,6 +1,7 @@
 import React, { useEffect, useMemo, useState } from "react";
 import { createRoot } from "react-dom/client";
 import {
+  AlertTriangle,
   ArrowLeft,
   ArrowRight,
   BookOpen,
@@ -13,6 +14,7 @@ import {
   FileText,
   Grid2X2,
   GripVertical,
+  Info,
   Library,
   LoaderCircle,
   Moon,
@@ -119,6 +121,10 @@ function App() {
   const [sourceQuery, setSourceQuery] = useState("");
   const [projectQuery, setProjectQuery] = useState("");
   const [theme, setTheme] = useState("dark");
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+  }, [theme]);
 
   const refresh = async () => {
     setLoading(true);
@@ -1662,13 +1668,47 @@ function TypedBlockBody({ block }) {
       </ol>
     );
   }
-  if (["unordered_procedure", "objective_list", "checklist", "source_list"].includes(block.type)) {
+  if (block.type === "objective_list") {
+    return (
+      <div className="callout callout-objectives">
+        <span className="callout-label">Learning objectives</span>
+        <ul>
+          {(payload.items || []).map((item, index) => (
+            <li key={`${block.id}-item-${index}`}>{listItemText(item)}</li>
+          ))}
+        </ul>
+      </div>
+    );
+  }
+  if (["unordered_procedure", "checklist", "source_list"].includes(block.type)) {
     return (
       <ul>
         {(payload.items || []).map((item, index) => (
           <li key={`${block.id}-item-${index}`}>{listItemText(item)}</li>
         ))}
       </ul>
+    );
+  }
+  if (block.type === "warning") {
+    return (
+      <div className="callout callout-warning" role="note">
+        <AlertTriangle size={15} />
+        <div>
+          <span className="callout-label">Warning</span>
+          <p>{payload.text || ""}</p>
+        </div>
+      </div>
+    );
+  }
+  if (block.type === "note") {
+    return (
+      <div className="callout callout-note" role="note">
+        <Info size={15} />
+        <div>
+          <span className="callout-label">Note</span>
+          <p>{payload.text || ""}</p>
+        </div>
+      </div>
     );
   }
   if (block.type === "table") {

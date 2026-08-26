@@ -1364,6 +1364,75 @@ body {
   font: 500 10px var(--font-mono);
 }
 
+/* Typed content callouts: "warning" and "note" are canonical content-block
+   types (backend/app/content_types.py CONTENT_BLOCK_TYPES) that previously
+   had no distinct rendering and fell through to a plain paragraph.
+   "objective_list" existed only as an unstyled <ul>, identical to every
+   other list type. Styled to match the archive's learning-objectives and
+   stored-energy-warning callouts (docs/ref/ui/design_ref.zip). */
+.app-shell .callout {
+  display: flex;
+  gap: 10px;
+  margin: 10px 0 0;
+  padding: 12px 14px;
+  border-radius: 4px;
+  border-left: 2px solid transparent;
+  max-width: 650px;
+}
+
+.app-shell .callout p,
+.app-shell .callout li {
+  font: 400 14px/1.65 var(--font-ui);
+  margin: 0;
+}
+
+.app-shell .callout ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.app-shell .callout-label {
+  display: block;
+  margin-bottom: 4px;
+  font: 700 9px var(--font-mono);
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.app-shell .callout-warning {
+  background: color-mix(in srgb, var(--warn) 9%, transparent);
+  border-left-color: var(--warn);
+  color: var(--warn);
+}
+
+.app-shell .callout-warning p {
+  color: var(--text);
+}
+
+.app-shell .callout-note {
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border-left-color: var(--accent);
+  color: var(--accent);
+}
+
+.app-shell .callout-note p {
+  color: var(--text);
+}
+
+.app-shell .callout-objectives {
+  display: block;
+  background: var(--panel);
+  border-left-color: var(--accent);
+}
+
+.app-shell .callout-objectives .callout-label {
+  color: var(--accent);
+}
+
+.app-shell .callout-objectives li {
+  color: var(--text);
+}
+
 .app-shell .canvas-stats {
   width: 100%;
   height: 36px;
@@ -1598,6 +1667,27 @@ body {
 .app-shell .approval-card > div {
   display: flex;
   gap: 6px;
+}
+
+/* DiffCard ("PROPOSED CHANGE" patch review card): styles.css still carries
+   this component's archive-era light-only card colors (a warm peach that
+   only ever matched the pre-reference light palette), so it needs the same
+   .app-shell override treatment as approval-card above. */
+.app-shell .diff-card {
+  border: 1px solid var(--border-strong);
+  background: var(--panel);
+}
+
+.app-shell .diff-head {
+  border-bottom: 1px solid var(--border);
+}
+
+.app-shell .diff-line {
+  color: var(--text);
+}
+
+.app-shell .diff-actions {
+  background: var(--panel-2);
 }
 
 .app-shell .review-checklist {
