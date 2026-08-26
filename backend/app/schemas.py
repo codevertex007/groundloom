@@ -26,6 +26,7 @@ class HealthResponse(BaseModel):
     worker_heartbeat: str = "unknown"
     oldest_queue_age_seconds: float | None = None
     config_fingerprint: str = ""
+    warnings: list[str] = []
 
 
 class LivenessResponse(BaseModel):

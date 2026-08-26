@@ -2,6 +2,7 @@ import base64
 import binascii
 import hashlib
 import json
+import logging
 import re
 import shutil
 import time
@@ -16,6 +17,8 @@ from sqlalchemy import and_, func, or_
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
+from .ai.agent import DEFAULT_MAX_TOOL_CALLS
+from .ai.contracts import AgentConfigurationError
 from .ai.evaluation.providers import RubricVersion, build_grader
 from .ai.persistence.checkpoints import save_checkpoint
 from .ai.retrieval.providers.embeddings import build_embedding_provider
@@ -80,6 +83,8 @@ from .schemas import (
 )
 from .source_safety import build_source_scanner
 from .vector_store import build_vector_index_store
+
+logger = logging.getLogger(__name__)
 
 
 def audit(
@@ -746,7 +751,7 @@ def start_run(
         },
         budget_json={
             "max_estimated_tokens": int((config.defaults_json if config else {}).get("max_estimated_tokens", 12000)),
-            "max_tool_calls": int((config.defaults_json if config else {}).get("max_tool_calls", 40)),
+            "max_tool_calls": int((config.defaults_json if config else {}).get("max_tool_calls", DEFAULT_MAX_TOOL_CALLS)),
             "max_cost_usd": float((config.defaults_json if config else {}).get("max_cost_usd", 1.0)),
         },
     )
@@ -994,7 +999,7 @@ def enforce_run_budget(db: Session, ctx: RuntimeContext, run: AgentRun) -> bool:
     tool_calls = int(usage.get("tool_calls", 0))
     estimated_cost = float(usage.get("estimated_cost_usd", 0.0))
     per_run_tokens = int((run.budget_json or {}).get("max_estimated_tokens", 12_000))
-    per_run_tools = int((run.budget_json or {}).get("max_tool_calls", 40))
+    per_run_tools = int((run.budget_json or {}).get("max_tool_calls", DEFAULT_MAX_TOOL_CALLS))
     per_run_cost = float((run.budget_json or {}).get("max_cost_usd", 1.0))
     day_start = utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     workspace_runs = (
@@ -1103,33 +1108,50 @@ def execute_deep_agent_turn(
                 run.request_text,
                 progress_callback=provider_progress,
                 cancel_check=provider_cancel_requested,
-                max_tool_calls=int((run.budget_json or {}).get("max_tool_calls", 40)),
+                max_tool_calls=int((run.budget_json or {}).get("max_tool_calls", DEFAULT_MAX_TOOL_CALLS)),
             )
             provider_error = None
             break
+        except AgentConfigurationError as exc:
+            # Fixed configuration cannot self-heal between attempts; retrying
+            # would only repeat the same failure while burning latency/cost.
+            provider_error = exc
+            logger.error("Agent run %s cannot start: %s", run.id, exc)
+            break
         except Exception as exc:
             provider_error = exc
+            logger.exception("Agent run %s failed on attempt %d/%d", run.id, attempt + 1, attempts)
             if attempt + 1 < attempts:
                 time.sleep(min(settings.agent_retry_backoff_seconds * (2**attempt), 2.0))
     if provider_error is not None or result is None:
         failure = provider_error or RuntimeError("agent provider returned no result")
+        misconfigured = isinstance(failure, AgentConfigurationError)
+        retryable = not misconfigured
         run.status = "failed"
-        run.error_code = "AGENT_PROVIDER_ERROR"
+        run.error_code = "AGENT_MISCONFIGURED" if misconfigured else "AGENT_PROVIDER_ERROR"
         append_event(
             db,
             ctx,
             run,
             "run.failed",
-            {"status": "failed", "error_code": run.error_code, "retryable": True},
+            {"status": "failed", "error_code": run.error_code, "retryable": retryable},
         )
-        audit(db, ctx, "run.failed", "agent_run", run.id, "Deep Agents provider execution failed", "failure")
+        audit(
+            db,
+            ctx,
+            "run.failed",
+            "agent_run",
+            run.id,
+            f"Deep Agents provider execution failed: {failure}" if misconfigured else "Deep Agents provider execution failed",
+            "failure",
+        )
         db.commit()
         checkpoint_local_run(settings, ctx, run, "failed", {"error_code": run.error_code})
         raise GroundloomError(
-            "DEPENDENCY_UNAVAILABLE",
-            "The configured agent provider could not complete the run.",
+            "AGENT_MISCONFIGURED" if misconfigured else "DEPENDENCY_UNAVAILABLE",
+            str(failure) if misconfigured else "The configured agent provider could not complete the run.",
             503,
-            retryable=True,
+            retryable=retryable,
         ) from failure
     if result.get("cancelled") or provider_cancel_requested():
         run.status = "cancelled"
@@ -1173,6 +1195,20 @@ def execute_deep_agent_turn(
 def execute_agent_turn(
     db: Session, ctx: RuntimeContext, run: AgentRun, settings: Settings | None = None
 ) -> None:
+    """Dispatch one agent turn to the configured runtime.
+
+    When ``model_provider == "local"`` (the default, and what the test/e2e
+    suite runs under), everything below this branch is a deterministic,
+    keyword-matched state machine — it never constructs a DeepAgents graph
+    and does not exercise the real middleware/subagent/tool-selection
+    behavior in ``execute_deep_agent_turn``. It is a fast, credential-free
+    double for the product's API/persistence/event contract, not a fidelity
+    double for the agent's reasoning: tests that only exercise this path
+    prove the surrounding product surface works, not that the LLM-driven
+    harness does. Real agent behavior needs a live provider and
+    ``execute_deep_agent_turn`` — see ``backend/tests/test_optional_provider_contracts.py``
+    for the tests that drive an actual compiled graph.
+    """
     if settings and settings.model_provider != "local":
         execute_deep_agent_turn(db, ctx, run, settings)
         return

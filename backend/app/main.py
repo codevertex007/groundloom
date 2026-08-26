@@ -245,12 +245,20 @@ def register_routes(app: FastAPI) -> FastAPI:
             database = "degraded"
         object_store = "ok" if request.app.state.object_store.health() else "degraded"
         operational = operational_snapshot(db, settings)
+        warnings: list[str] = []
+        if settings.model_provider != "local" and settings.checkpoint_backend != "postgres":
+            warnings.append(
+                f"model_provider={settings.model_provider!r} requires checkpoint_backend="
+                "'postgres'; every agent run will fail with AGENT_MISCONFIGURED until "
+                "GROUNDLOOM_CHECKPOINT_BACKEND=postgres is set."
+            )
         return {
             "status": "ok" if database == object_store == "ok" else "degraded",
             "database": database,
             "object_store": object_store,
             "model_provider": settings.model_provider,
             "version": "0.1.0",
+            "warnings": warnings,
             **operational,
         }
 

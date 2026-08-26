@@ -52,21 +52,24 @@ class PolicyMiddleware(AgentMiddleware):
 
 class BudgetMiddleware(AgentMiddleware):
     def wrap_tool_call(self, request: Any, handler: Any) -> Any:
+        # Cancellation is checked before consuming budget: a cancelled run's
+        # in-flight attempt should not decrement a counter for a tool call
+        # that never executes.
+        ensure_not_cancelled(request.runtime)
         try:
             runtime_context(request.runtime)["tool_budget"].consume()
         except BudgetExceeded:
             emit(request.runtime, "agent.progress", {"stage": "budget_exhausted"})
             raise
-        ensure_not_cancelled(request.runtime)
         return handler(request)
 
     async def awrap_tool_call(self, request: Any, handler: Any) -> Any:
+        ensure_not_cancelled(request.runtime)
         try:
             runtime_context(request.runtime)["tool_budget"].consume()
         except BudgetExceeded:
             emit(request.runtime, "agent.progress", {"stage": "budget_exhausted"})
             raise
-        ensure_not_cancelled(request.runtime)
         return await handler(request)
 
 

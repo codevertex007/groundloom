@@ -15,6 +15,15 @@ ProgressCallback = EventSink
 CancelCheck = CancellationCheck
 
 
+class AgentConfigurationError(RuntimeError):
+    """Raised when the agent runtime cannot start due to fixed configuration.
+
+    Distinct from provider/network failures: retrying without changing
+    configuration can never succeed, so callers must not apply the generic
+    retry-with-backoff policy to this exception.
+    """
+
+
 class AgentRuntimeContext(TypedDict):
     """Transient trusted context supplied by the application, never by the model."""
 

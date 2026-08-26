@@ -120,6 +120,20 @@ def test_health_readiness_and_liveness_expose_bounded_operational_state(tmp_path
     assert body["checkpointer"] == "local"
     assert len(body["config_fingerprint"]) == 16
     assert body["oldest_queue_age_seconds"] is None or body["oldest_queue_age_seconds"] >= 0
+    assert body["warnings"] == []
+
+
+def test_health_warns_when_model_provider_and_checkpoint_backend_are_mismatched(tmp_path):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'health-warn.db'}",
+        object_store_path=tmp_path / "objects",
+        model_provider="openai",
+    )
+    api = TestClient(create_app(settings))
+    body = api.get("/health").json()
+    assert len(body["warnings"]) == 1
+    assert "checkpoint_backend" in body["warnings"][0]
+    assert "AGENT_MISCONFIGURED" in body["warnings"][0]
 
 
 def test_checkpoint_scope_and_redacted_telemetry(tmp_path):

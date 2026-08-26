@@ -210,6 +210,151 @@ def test_groundloom_deepagents_runtime_projects_provider_stream(monkeypatch):
     assert [event for event, _payload in events].count("tool.completed") == 1
 
 
+def test_subagent_delegation_shares_the_parent_tool_budget_and_middleware(monkeypatch):
+    """Drive a real compiled graph through an actual `task` delegation.
+
+    Regression coverage for the subagent middleware-boundary gap: Groundloom's
+    Budget/Policy/Progress middleware is registered via
+    ``HarnessProfile.extra_middleware`` (see ai/agent.py) specifically because
+    that is the extension point deepagents threads into declarative subagent
+    stacks, unlike ``create_deep_agent(middleware=...)`` which only reaches
+    the main agent. This test proves the wiring actually works end to end
+    against the pinned framework rather than trusting the source trace alone:
+    a scripted tool-calling fake model delegates to the real
+    `source-researcher` subagent, which calls a real Groundloom tool, and the
+    parent's `BudgetCounter` must show consumption from *both* the `task`
+    call and the subagent's own tool call — proof the same budget/middleware
+    reaches subagent execution, not just the primary agent.
+    """
+    pytest.importorskip("deepagents")
+    deepagents_graph = pytest.importorskip("deepagents.graph")
+    fake_models = pytest.importorskip("langchain_core.language_models.fake_chat_models")
+    messages = pytest.importorskip("langchain_core.messages")
+    from app.ai import agent as runtime_provider
+    from app.ai.agent import DeepAgentsAgentRuntime
+    from app.config import Settings
+
+    settings = Settings(
+        model_provider="openai",
+        model_name="ignored-for-subagent-budget-probe",
+        checkpoint_backend="postgres",
+    )
+    runtime = DeepAgentsAgentRuntime(settings)
+
+    class FakeServices:
+        def list_packages(self):
+            return ()
+
+        def __getattr__(self, name):
+            def result(*_args, **_kwargs):
+                return [] if name in {"project_skills", "read_workspace_memory"} else {}
+
+            return result
+
+    runtime._service_factory = lambda *_args: FakeServices()
+
+    class FakeCheckpointProvider:
+        @contextmanager
+        def open(self):
+            yield None
+
+    monkeypatch.setattr(
+        runtime_provider,
+        "build_checkpoint_provider",
+        lambda _settings: FakeCheckpointProvider(),
+    )
+
+    # Consumed in call order, shared across the parent graph and the
+    # subagent's own nested graph because both resolve to this same model
+    # instance (Groundloom's subagents inherit the parent's model).
+    scripted_turns = [
+        messages.AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "task",
+                    "args": {
+                        "description": "Find sources on caffeine and sleep.",
+                        "subagent_type": "source-researcher",
+                    },
+                    "id": "call-task-1",
+                }
+            ],
+        ),
+        messages.AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "name": "search_source_passages",
+                    "args": {"query": "caffeine sleep"},
+                    "id": "call-search-1",
+                }
+            ],
+        ),
+        messages.AIMessage(content="No authorized passages were found."),
+        messages.AIMessage(content="I could not find supporting evidence."),
+    ]
+
+    class ScriptedToolCallingModel(fake_models.FakeMessagesListChatModel):
+        def bind_tools(self, _tools, **_kwargs):
+            return self
+
+        def _get_ls_params(self, **_kwargs):
+            # Subagents that don't set their own "model" (Groundloom's three
+            # specs all inherit the parent's) resolve their harness profile
+            # from the already-resolved model *instance*, not the original
+            # "openai:..." spec string — deepagents falls back to this
+            # provider-identity introspection. A real ChatOpenAI instance
+            # reports "openai" here; without this override the fake model
+            # would report its own class name and the registered profile
+            # (and therefore Budget/Policy/Progress middleware) would
+            # silently never reach the subagent, which is precisely the gap
+            # this test exists to catch.
+            return {"ls_provider": "openai", "ls_model_name": "scripted-fake-model"}
+
+    fake_model = ScriptedToolCallingModel(responses=scripted_turns)
+
+    # Replacing kwargs["model"] with a bare instance (as the other tests in
+    # this file do) would strip the "openai:..." spec string deepagents
+    # needs to resolve the registered HarnessProfile, silently disabling
+    # excluded_tools/extra_middleware for this run. Patch model *resolution*
+    # instead so the spec string keeps flowing through create_deep_agent
+    # unchanged, and both the main agent and the subagent (which resolves
+    # its own model from the same spec, since Groundloom's subagent specs
+    # don't set "model") land on the same scripted fake model instance.
+    monkeypatch.setattr(deepagents_graph, "resolve_model", lambda _spec: fake_model)
+
+    # runtime.invoke() constructs its own BudgetCounter internally and never
+    # returns it, so capture the actual instance it builds in order to
+    # inspect .used afterward.
+    captured_counters: list[BudgetCounter] = []
+    real_budget_counter = runtime_provider.BudgetCounter
+
+    class CapturingBudgetCounter(real_budget_counter):
+        def __post_init__(self) -> None:
+            super().__post_init__()
+            captured_counters.append(self)
+
+    monkeypatch.setattr(runtime_provider, "BudgetCounter", CapturingBudgetCounter)
+
+    result = runtime.invoke(
+        None,
+        SimpleNamespace(workspace_id="workspace-1"),
+        "project-1",
+        "project:project-1:budget-probe",
+        "Research caffeine and sleep.",
+        max_tool_calls=4,
+    )
+
+    assert result["messages"][-1].content == "I could not find supporting evidence."
+    assert len(captured_counters) == 1
+    # Two tool calls happened: the parent's `task` delegation and the
+    # subagent's own `search_source_passages` call. If subagent execution
+    # didn't share the parent's runtime context/middleware, the subagent's
+    # call would consume nothing from this counter and .used would stay 1.
+    assert captured_counters[0].used == 2
+
+
 def test_published_project_skill_is_projected_as_native_skill_md(tmp_path: Path):
     pytest.importorskip("deepagents")
     from app.config import Settings

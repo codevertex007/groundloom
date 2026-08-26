@@ -7,12 +7,13 @@ and streaming composition. Reusable policy primitives live in
 
 from typing import Any
 
-from groundloom_harness import BudgetCounter
+from groundloom_harness import DEFAULT_EXCLUDED_TOOLS, BudgetCounter
 from groundloom_harness.skills_backend import ReadOnlySkillBackend
 from groundloom_harness.streaming import consume_provider_stream
 
 from ..config import Settings
 from .contracts import (
+    AgentConfigurationError,
     AgentDefinition,
     AgentRuntimeContext,
     CancelCheck,
@@ -23,6 +24,32 @@ from .persistence.checkpoints import build_checkpoint_provider
 from .prompt_loader import load_prompt
 from .runtime.local import AgentRuntime
 from .tools.registry import build_toolset
+
+# Default cap on tool calls per agent run when a caller doesn't pin one via
+# the run's budget. Shared with services.py's execute_deep_agent_turn, which
+# reads the same fallback from AgentRun.budget_json.
+DEFAULT_MAX_TOOL_CALLS = 40
+
+# LangGraph's recursion_limit counts graph superstep transitions, not tool
+# calls: each tool call is roughly two supersteps (model turn, tool turn), so
+# the limit is sized at 2x the tool-call budget plus headroom for the
+# framing turns (initial reasoning step, final response). Clamped to a floor
+# that tolerates a couple of exchanges even at a tiny budget, and a ceiling
+# that bounds worst-case run length regardless of a misconfigured budget.
+_RECURSION_LIMIT_FLOOR = 8
+_RECURSION_LIMIT_CEILING = 200
+_RECURSION_LIMIT_PER_TOOL_CALL = 2
+_RECURSION_LIMIT_HEADROOM = 4
+
+
+def _recursion_limit(max_tool_calls: int) -> int:
+    return max(
+        _RECURSION_LIMIT_FLOOR,
+        min(
+            _RECURSION_LIMIT_CEILING,
+            max_tool_calls * _RECURSION_LIMIT_PER_TOOL_CALL + _RECURSION_LIMIT_HEADROOM,
+        ),
+    )
 
 
 class DeepAgentsAgentRuntime(AgentRuntime):
@@ -39,20 +66,18 @@ class DeepAgentsAgentRuntime(AgentRuntime):
             raise RuntimeError(
                 "Install the pinned agent extra to use the Deep Agents runtime"
             ) from exc
+        from .middleware import build_middleware_stack
+
         self._create_deep_agent: Any = create_deep_agent
         register_harness_profile(
             settings.model_provider,
             HarnessProfile(
-                excluded_tools=frozenset(
-                    {
-                        "write_file",
-                        "edit_file",
-                        "delete",
-                        "glob",
-                        "grep",
-                        "execute",
-                    }
-                )
+                excluded_tools=DEFAULT_EXCLUDED_TOOLS,
+                # extra_middleware (not middleware=... on create_deep_agent)
+                # is the extension point deepagents threads into every stack
+                # it assembles, including declarative subagents — see
+                # ai/middleware/builder.py for why this placement matters.
+                extra_middleware=build_middleware_stack,
             ),
         )
 
@@ -66,10 +91,9 @@ class DeepAgentsAgentRuntime(AgentRuntime):
         *,
         progress_callback: ProgressCallback | None = None,
         cancel_check: CancelCheck | None = None,
-        max_tool_calls: int = 40,
+        max_tool_calls: int = DEFAULT_MAX_TOOL_CALLS,
     ) -> dict[str, Any]:
         from ..integrations.ai.services import GroundloomAgentServices
-        from .middleware import build_middleware_stack
         from .subagents import build_subagents
 
         service_factory = getattr(self, "_service_factory", GroundloomAgentServices)
@@ -90,14 +114,20 @@ class DeepAgentsAgentRuntime(AgentRuntime):
             model = f"{self.settings.model_provider}:{model}"
         checkpoint_provider = build_checkpoint_provider(self.settings)
         if checkpoint_provider is None:
-            raise RuntimeError("The Deep Agents runtime requires the Postgres checkpoint backend")
+            raise AgentConfigurationError(
+                f"GROUNDLOOM_MODEL_PROVIDER={self.settings.model_provider!r} requires "
+                "GROUNDLOOM_CHECKPOINT_BACKEND=postgres — the Deep Agents runtime persists "
+                "execution state through the Postgres checkpointer and cannot run against the "
+                "local checkpoint adapter. Set GROUNDLOOM_CHECKPOINT_BACKEND=postgres and "
+                "configure GROUNDLOOM_DATABASE_URL (or GROUNDLOOM_WORKER_DATABASE_URL), or set "
+                "GROUNDLOOM_MODEL_PROVIDER=local to keep using the deterministic adapter."
+            )
 
         with checkpoint_provider.open() as checkpointer:
             graph: Any = self._create_deep_agent(
                 model=model,
                 tools=list(toolset.all_tools),
                 system_prompt=load_prompt("primary_system.txt"),
-                middleware=build_middleware_stack(),
                 backend=skill_backend,
                 skills=["/skills/project/"],
                 context_schema=AgentRuntimeContext,
@@ -108,7 +138,7 @@ class DeepAgentsAgentRuntime(AgentRuntime):
             )
             config = {
                 "configurable": {"thread_id": thread_key},
-                "recursion_limit": max(8, min(200, max_tool_calls * 2 + 4)),
+                "recursion_limit": _recursion_limit(max_tool_calls),
             }
             graph_input = {"messages": [{"role": "user", "content": request_text}]}
             if progress_callback is None and cancel_check is None:

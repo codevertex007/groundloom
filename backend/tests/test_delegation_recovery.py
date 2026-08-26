@@ -1,7 +1,9 @@
+import logging
+
 from app.config import Settings
 from app.context import RuntimeContext
 from app.main import create_app
-from app.models import DelegatedTask, SkillVersion
+from app.models import AgentRun, DelegatedTask, SkillVersion
 from app.services import run_delegated_worker_once
 from fastapi.testclient import TestClient
 
@@ -11,6 +13,43 @@ def headers():
         "X-User-ID": "local-user",
         "X-Workspace-ID": "local-workspace",
     }
+
+
+def test_deep_agent_runtime_without_postgres_checkpoint_fails_fast_not_retried(tmp_path, caplog):
+    """A real model provider with the default local checkpoint backend is a
+    fixed configuration error: it must fail on the first attempt (no
+    retry-with-backoff), be marked non-retryable, name the fix, and be
+    logged server-side rather than silently swallowed."""
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'misconfigured.db'}",
+        object_store_path=tmp_path / "objects",
+        model_provider="openai",
+        model_name="gpt-4o-mini",
+    )
+    app = create_app(settings)
+    with caplog.at_level(logging.ERROR, logger="app.services"), TestClient(app) as api:
+        response = api.post(
+            "/v1/projects",
+            headers=headers(),
+            json={"name": "Misconfigured", "project_type": "brief", "brief": "Trigger the gate"},
+        )
+        assert response.status_code == 503
+        body = response.json()
+        assert body["code"] == "AGENT_MISCONFIGURED"
+        assert body["retryable"] is False
+        assert "GROUNDLOOM_CHECKPOINT_BACKEND=postgres" in body["message"]
+
+        with app.state.session_factory() as db:
+            run = db.query(AgentRun).filter_by(workspace_id="local-workspace").first()
+            assert run is not None
+            assert run.status == "failed"
+            assert run.error_code == "AGENT_MISCONFIGURED"
+
+    # Exactly one error record: the fail-fast branch never entered the
+    # attempt/backoff loop, so no per-attempt logger.exception calls fired.
+    error_records = [r for r in caplog.records if r.levelno == logging.ERROR]
+    assert len(error_records) == 1
+    assert "GROUNDLOOM_CHECKPOINT_BACKEND" in error_records[0].getMessage()
 
 
 def test_partial_delegation_retry_is_bounded_and_reconciled(tmp_path):

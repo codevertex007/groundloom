@@ -6,12 +6,13 @@ keep ownership of their models, prompts, tools, subagents, and persistence.
 
 from .budgets import BudgetCounter, BudgetExceeded
 from .context import CancellationCheck, EventSink, HarnessRuntimeContext
-from .policy import ToolPolicy
+from .policy import DEFAULT_EXCLUDED_TOOLS, ToolPolicy
 
 __all__ = [
     "BudgetCounter",
     "BudgetExceeded",
     "CancellationCheck",
+    "DEFAULT_EXCLUDED_TOOLS",
     "EventSink",
     "HarnessRuntimeContext",
     "ToolPolicy",
