@@ -407,6 +407,59 @@ def test_patch_reject_and_accept_exactly_once(tmp_path):
     assert content_after["version"]["id"] != base
 
 
+def test_second_accepted_patch_carries_forward_first_patchs_blocks(tmp_path):
+    """Regression test: ContentBlock.id used to be the bare primary key, but
+    accept_patch() intentionally carries a block's id forward unchanged into
+    every later version it survives into (for patch-addressing and citation
+    continuity). Inserting that carried-forward row again for the new
+    version's id therefore always collided once a project had more than one
+    accepted patch, crashing every second-and-later accept with an
+    IntegrityError. Fixed by widening the primary key to
+    (content_version_id, id). This test accepts two patches in sequence and
+    asserts the second one succeeds with the first patch's content intact."""
+    api = client(tmp_path)
+    project = api.post(
+        "/v1/projects",
+        headers=headers(),
+        json={"name": "Multi-edit", "project_type": "brief", "brief": "A multi-round brief"},
+    ).json()
+    project_id = project["id"]
+
+    api.post(
+        f"/v1/projects/{project_id}/threads/messages",
+        headers=headers(),
+        json={"text": "Generate a draft"},
+    )
+    first_patch = api.get(f"/v1/projects/{project_id}/patches", headers=headers()).json()[0]
+    first_accept = api.post(
+        f"/v1/patches/{first_patch['id']}/accept",
+        headers=headers(),
+        json={"expected_current_version_id": first_patch["base_content_version_id"]},
+    )
+    assert first_accept.status_code == 200
+    content_after_first = api.get(f"/v1/projects/{project_id}/content", headers=headers()).json()
+    first_block_ids = {block["id"] for block in content_after_first["blocks"]}
+    assert first_block_ids
+
+    api.post(
+        f"/v1/projects/{project_id}/threads/messages",
+        headers=headers(),
+        json={"text": "Generate another draft"},
+    )
+    second_patch = api.get(f"/v1/projects/{project_id}/patches", headers=headers()).json()[0]
+    second_accept = api.post(
+        f"/v1/patches/{second_patch['id']}/accept",
+        headers=headers(),
+        json={"expected_current_version_id": second_patch["base_content_version_id"]},
+    )
+    assert second_accept.status_code == 200
+    content_after_second = api.get(f"/v1/projects/{project_id}/content", headers=headers()).json()
+    second_block_ids = {block["id"] for block in content_after_second["blocks"]}
+    # The first patch's blocks must still be present, carried forward with
+    # the same logical ids, alongside whatever the second patch added.
+    assert first_block_ids <= second_block_ids
+
+
 def test_cross_workspace_is_denied(tmp_path):
     api = client(tmp_path)
     project = api.post(
