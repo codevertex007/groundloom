@@ -4,13 +4,13 @@ import zipfile
 
 import httpx
 import pytest
+from app.application.sources import run_ingestion_worker_once
 from app.config import Settings
 from app.context import RuntimeContext
 from app.errors import GroundloomError
 from app.ids import new_id
 from app.main import create_app
 from app.models import IngestionJob, Source, SourceVersion
-from app.services import run_ingestion_worker_once
 from app.source_safety import HttpSourceScanner, LocalSourceScanner, build_source_scanner
 from fastapi.testclient import TestClient
 

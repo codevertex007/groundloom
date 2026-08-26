@@ -8,7 +8,6 @@ and streaming composition. Reusable policy primitives live in
 from typing import Any
 
 from groundloom_harness import DEFAULT_EXCLUDED_TOOLS, BudgetCounter
-from groundloom_harness.skills_backend import ReadOnlySkillBackend
 from groundloom_harness.streaming import consume_provider_stream
 
 from ..config import Settings
@@ -61,7 +60,12 @@ class DeepAgentsAgentRuntime(AgentRuntime):
     def __init__(self, settings: Settings):
         self.settings = settings
         try:
-            from deepagents import HarnessProfile, create_deep_agent, register_harness_profile
+            from deepagents import (
+                GeneralPurposeSubagentProfile,
+                HarnessProfile,
+                create_deep_agent,
+                register_harness_profile,
+            )
         except ImportError as exc:
             raise RuntimeError(
                 "Install the pinned agent extra to use the Deep Agents runtime"
@@ -73,6 +77,7 @@ class DeepAgentsAgentRuntime(AgentRuntime):
             settings.model_provider,
             HarnessProfile(
                 excluded_tools=DEFAULT_EXCLUDED_TOOLS,
+                general_purpose_subagent=GeneralPurposeSubagentProfile(enabled=False),
                 # extra_middleware (not middleware=... on create_deep_agent)
                 # is the extension point deepagents threads into every stack
                 # it assembles, including declarative subagents — see
@@ -93,6 +98,13 @@ class DeepAgentsAgentRuntime(AgentRuntime):
         cancel_check: CancelCheck | None = None,
         max_tool_calls: int = DEFAULT_MAX_TOOL_CALLS,
     ) -> dict[str, Any]:
+        # Lazy like the deepagents import in __init__: skills_backend itself
+        # imports deepagents.backends at module level, so importing it eagerly
+        # would force every importer of this module (this file used to do so
+        # at the top) to have the optional `agent` extra installed just to
+        # import app.services/app.main, not only to actually run this method.
+        from groundloom_harness.skills_backend import ReadOnlySkillBackend
+
         from ..integrations.ai.services import GroundloomAgentServices
         from .subagents import build_subagents
 

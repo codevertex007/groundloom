@@ -2,7 +2,13 @@ from concurrent.futures import ThreadPoolExecutor
 
 import pytest
 from groundloom_harness import BudgetCounter, BudgetExceeded, ToolPolicy
-from groundloom_harness.skills_backend import ReadOnlySkillBackend, SkillPackage
+
+# groundloom_harness.skills_backend imports deepagents.backends at module
+# level (it implements deepagents' BackendProtocol), so importing it here
+# unconditionally would fail collection of this whole file wherever the
+# optional `agent` extra isn't installed, rather than skipping gracefully.
+pytest.importorskip("deepagents")
+from groundloom_harness.skills_backend import ReadOnlySkillBackend, SkillPackage  # noqa: E402
 
 
 class StaticSkillSource:

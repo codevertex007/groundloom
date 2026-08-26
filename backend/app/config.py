@@ -49,6 +49,9 @@ class Settings(BaseSettings):
     embedding_api_key: str | None = None
     embedding_base_url: str | None = None
     embedding_timeout_seconds: float = Field(default=10.0, gt=0, le=120)
+    embedding_batch_size: int = Field(default=64, ge=1, le=512)
+    source_chunk_size: int = Field(default=4000, ge=256, le=20_000)
+    source_chunk_overlap: int = Field(default=400, ge=0, le=5000)
     retrieval_index_backend: Literal["auto", "local", "pgvector"] = "auto"
     reranker_provider: str = "local"
     reranker_model: str = "deterministic-overlap-v1"
@@ -96,6 +99,8 @@ class Settings(BaseSettings):
         return value
 
     def validate_runtime(self) -> None:
+        if self.source_chunk_overlap >= self.source_chunk_size:
+            raise RuntimeError("Source chunk overlap must be smaller than source chunk size")
         if self.env in {"staging", "production"} and not self.database_url.startswith("sqlite"):
             self._validate_runtime_database_roles()
         if self.env == "production":
@@ -201,7 +206,10 @@ class Settings(BaseSettings):
             "embedding_provider": self.embedding_provider,
             "embedding_model": self.embedding_model,
             "embedding_dimensions": self.embedding_dimensions,
+            "embedding_batch_size": self.embedding_batch_size,
             "embedding_base_url": self.embedding_base_url,
+            "source_chunk_size": self.source_chunk_size,
+            "source_chunk_overlap": self.source_chunk_overlap,
             "retrieval_index_backend": self.retrieval_index_backend,
             "reranker_provider": self.reranker_provider,
             "reranker_model": self.reranker_model,

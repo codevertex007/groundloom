@@ -4,6 +4,7 @@ import pytest
 from app.ai.persistence.checkpoints import load_checkpoint, save_checkpoint
 from app.ai.runtime.factory import build_agent_runtime
 from app.ai.runtime.local import LocalDeterministicAgentRuntime
+from app.application.operations import touch_worker_heartbeat
 from app.config import Settings
 from app.db import build_session_factory, init_database, prepare_worker_database
 from app.errors import GroundloomError
@@ -11,7 +12,6 @@ from app.ids import new_id
 from app.main import create_app
 from app.models import DeletionRequest, OutboxMessage
 from app.outbox import publish_pending
-from app.services import touch_worker_heartbeat
 from app.telemetry import LocalTelemetry, build_telemetry
 from fastapi.testclient import TestClient
 

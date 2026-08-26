@@ -13,6 +13,12 @@ Persist citations to immutable passage/block lineage, not display labels. The
 derived `SourceChunk.embedding_json` and PostgreSQL
 `source_chunk_embeddings` representations are rebuildable and never canonical
 state.
+Multiple chunks may represent one immutable block. Local scoring uses the
+maximum cosine similarity across that block's chunk vectors. PostgreSQL first
+unions bounded pgvector and lexical candidates, then loads those blocks and
+their immediate same-version neighbors; it does not materialize every selected
+chunk after ANN candidate search. Full selected-corpus scanning is limited to
+the explicit SQLite development adapter.
 Required tests/evals: golden recall/precision, exact page/block navigation,
 conflicting evidence, no evidence, version pinning, prompt-injection passages,
 cross-tenant invented IDs, large-result bounds, deterministic/provider reranker

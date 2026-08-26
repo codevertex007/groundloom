@@ -22,6 +22,6 @@ frontend/playwright-report/
 *.sqlite3
 *.db
 *.egg-info/
-artifacts/
-uploads/
-exports/
+/artifacts/
+/uploads/
+/exports/

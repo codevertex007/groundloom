@@ -23,7 +23,7 @@ class RetrievalService:
         limit = max(1, min(limit, 100))
         query_vector = self.embeddings.embed([query])[0]
         candidate_limit = max(16, min(100, limit * 8))
-        snapshot = self.repository.load(query_vector, candidate_limit)
+        snapshot = self.repository.load(query, query_vector, candidate_limit)
         if not snapshot.has_source_scope:
             return EvidenceBundle(
                 query=query,
@@ -39,7 +39,13 @@ class RetrievalService:
             lexical = sum(1 for term in terms if term in normalized) / max(len(terms), 1)
             raw_semantic = snapshot.semantic_scores.get(candidate.block_id)
             if raw_semantic is None:
-                raw_semantic = cosine_similarity(query_vector, candidate.embedding)
+                raw_semantic = max(
+                    (
+                        cosine_similarity(query_vector, list(embedding))
+                        for embedding in candidate.embeddings
+                    ),
+                    default=0.0,
+                )
             score = hybrid_score(lexical, max(0.0, raw_semantic))
             if score > 0 and (lexical > 0 or raw_semantic >= 0.25):
                 ranked.append((score, candidate))

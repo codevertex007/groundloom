@@ -12,6 +12,11 @@ The primary agent delegates only bounded, context-isolated work.
 | Module writer | Typed module draft | One owned module/task; cited claims |
 | Citation auditor | Audit findings | Read-only; never rewrites content |
 
+The provider `HarnessProfile` explicitly sets
+`GeneralPurposeSubagentProfile(enabled=False)`. Deep Agents therefore does not
+add its implicit general-purpose delegate with the parent's full tool surface;
+the executable inventory is exactly the three reviewed specialists above.
+
 Outline construction and quality review — originally scoped as separate `Outline architect` and `Quality reviewer` LLM subagents — are instead fulfilled by non-agent mechanisms: outline proposals are assembled directly from the primary agent's own tool calls and typed patch proposals, and quality review is the deterministic rubric evaluator (`backend/app/ai/evaluation/providers.py`, `backend/scripts/run_evals.py`) rather than a self-certifying model. An `Assessment writer` specialist remains unimplemented; project assessments are out of scope for the current vertical slice.
 
 Use synchronous delegation for small dependent tasks, async for long independent tasks, and dynamic batches when module count is runtime-defined. Each task records parent run/todo, input refs, pinned config, ownership, tools, permissions, budget, status, result, and error.

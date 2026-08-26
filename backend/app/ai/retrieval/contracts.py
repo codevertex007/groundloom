@@ -14,7 +14,7 @@ class RetrievalCandidate:
     page: int | None
     section_path: str
     text: str
-    embedding: list[float] | None
+    embeddings: tuple[tuple[float, ...], ...]
 
 
 @dataclass(frozen=True)
@@ -26,5 +26,10 @@ class RetrievalSnapshot:
 
 
 class RetrievalRepository(Protocol):
-    def load(self, query_vector: list[float], candidate_limit: int) -> RetrievalSnapshot:
+    def load(
+        self,
+        query: str,
+        query_vector: list[float],
+        candidate_limit: int,
+    ) -> RetrievalSnapshot:
         """Return only candidates authorized by trusted application context."""

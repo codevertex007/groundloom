@@ -9,10 +9,10 @@ import argparse
 import time
 from uuid import uuid4
 
+from app.application.operations import touch_worker_heartbeat
 from app.config import get_settings
 from app.db import prepare_worker_database, set_worker_context
 from app.outbox import build_delivery, publish_pending
-from app.services import touch_worker_heartbeat
 
 
 def main() -> None:

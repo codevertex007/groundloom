@@ -2,6 +2,8 @@ from pathlib import Path
 
 from app.ai.tools.catalog import TOOL_CATALOG
 from app.config import Settings
+from app.context import RuntimeContext
+from app.integrations.ai.services import GroundloomAgentServices
 from app.main import create_app
 from fastapi.testclient import TestClient
 
@@ -24,3 +26,33 @@ def test_memory_is_scoped_and_secret_rejected(tmp_path: Path):
     assert denied.status_code == 403
     secret = api.post("/v1/memory", headers=headers, json={"namespace": "preferences", "key": "secret", "value": {"api_key": "do-not-store"}})
     assert secret.status_code == 422
+
+
+def test_agent_patch_idempotency_fingerprints_the_complete_bounded_request(tmp_path: Path):
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'agent-patches.db'}",
+        object_store_path=tmp_path / "objects",
+    )
+    app = create_app(settings)
+    headers = {"X-User-ID": "local-user", "X-Workspace-ID": "local-workspace"}
+    with TestClient(app) as api:
+        project = api.post(
+            "/v1/projects",
+            headers=headers,
+            json={"name": "Patch keys", "project_type": "brief", "brief": "Key patches safely"},
+        ).json()
+
+    context = RuntimeContext(
+        "local-user",
+        "local-workspace",
+        frozenset({"workspace_admin"}),
+        "patch-key-test",
+    )
+    with app.state.session_factory() as db:
+        services = GroundloomAgentServices(db, context, project["id"], settings)
+        first = services.propose_text_patch("Same summary", "First proposed text")
+        replay = services.propose_text_patch("Same summary", "First proposed text")
+        second = services.propose_text_patch("Same summary", "Different proposed text")
+
+    assert replay == first
+    assert second["patch_id"] != first["patch_id"]

@@ -91,7 +91,14 @@ jobs:
         with:
           python-version: "3.12"
       - run: python -m pip install -e ".[dev,agent,postgres,storage]"
-      - run: docker compose up -d --wait
+      # postgres/minio are long-running services `--wait` can watch for a
+      # healthy state; minio-init is a one-shot bucket-creation container
+      # that's expected to exit(0) once done, which `--wait` treats as a
+      # failed service rather than a completed one. Wait on the two real
+      # services, then run the init container separately so its own exit
+      # is the (blocking, but not misclassified) checkpoint for step 3.
+      - run: docker compose up -d postgres minio --wait
+      - run: docker compose up minio-init
       - run: python backend/scripts/migrate.py
       - run: python -m pytest backend/tests/test_postgres_deployment_integration.py -q -rA
       - if: always()

@@ -5,6 +5,13 @@
 **Primary framework:** Deep Agents on LangGraph  
 **Recommended implementation shape:** Modular monolith + durable worker processes, with explicit seams for later service extraction.
 
+The current backend ownership map and prioritized refactoring evidence are
+recorded in `backend-architecture-assessment.md`. Cross-cutting deterministic
+application services live in `backend/app/application/`; external parsing,
+derived indexing, and rendering live under `backend/app/integrations/`; the
+Deep Agents composition remains isolated in `backend/app/ai/` and the reusable
+Groundloom-independent harness package.
+
 ---
 
 ## 1. Executive decision

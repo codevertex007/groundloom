@@ -15,7 +15,17 @@ from types import SimpleNamespace
 
 import pytest
 from groundloom_harness import BudgetCounter, BudgetExceeded, ToolPolicy
-from groundloom_harness.middleware import BudgetMiddleware, PolicyMiddleware, ProgressMiddleware
+
+# groundloom_harness.middleware imports langchain.agents.middleware at module
+# level (these classes subclass AgentMiddleware), so importing it here
+# unconditionally would fail collection of this whole file wherever the
+# optional `agent` extra isn't installed, rather than skipping gracefully.
+pytest.importorskip("langchain.agents.middleware")
+from groundloom_harness.middleware import (  # noqa: E402
+    BudgetMiddleware,
+    PolicyMiddleware,
+    ProgressMiddleware,
+)
 
 
 class FakeModelRequest:

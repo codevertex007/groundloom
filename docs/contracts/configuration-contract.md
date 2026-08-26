@@ -17,6 +17,12 @@ telemetry. Deployment settings select `checkpoint_backend=postgres`,
 `object_store_backend=s3`, a configured model provider, and
 `telemetry_provider=langfuse`; production startup rejects any local substitute.
 Optional dependency groups are `agent`, `storage`, and `observability`.
+`langchain-text-splitters==1.1.2` is a base dependency because deterministic
+source ingestion always uses its recursive splitter, independently of whether
+a model provider is configured. `source_chunk_size` (default 4000),
+`source_chunk_overlap` (default 400), and `embedding_batch_size` (default 64)
+are bounded settings included in the redacted configuration fingerprint;
+overlap must be smaller than chunk size.
 Provider calls use at most `agent_max_attempts` (default 3) with bounded
 exponential backoff; cancellation is checked before each retry.
 Embedding calls use the configured `embedding_provider`, model, fixed vector

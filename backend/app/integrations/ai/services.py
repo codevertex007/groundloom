@@ -1,11 +1,14 @@
 """Authorized backend implementation of the AI service port."""
 
+import hashlib
+import json
 from dataclasses import dataclass
 from typing import Any
 
 from groundloom_harness.skills_backend import SkillPackage
 from sqlalchemy.orm import Session
 
+from ...application.sources import read_passage
 from ...config import Settings
 from ...context import RuntimeContext
 from ...errors import GroundloomError
@@ -17,7 +20,6 @@ from ...services import (
     list_skills,
     project_detail,
     read_memory,
-    read_passage,
     validate_content,
     validation_dto,
 )
@@ -91,12 +93,27 @@ class GroundloomAgentServices:
         citations: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         version, blocks = content_blocks(self.db, self.context, self.project_id)
+        bounded_summary = summary[:2_000]
+        bounded_text = text[:20_000]
+        bounded_citations = (citations or [])[:20]
         operation = PatchOperation(
             op="insert_after",
             after_block_id=blocks[-1].id if blocks else None,
-            payload={"block_type": "paragraph", "text": text[:20_000]},
-            citations=(citations or [])[:20],
+            payload={"block_type": "paragraph", "text": bounded_text},
+            citations=bounded_citations,
         )
+        request_fingerprint = hashlib.sha256(
+            json.dumps(
+                {
+                    "base_content_version_id": version.id,
+                    "summary": bounded_summary,
+                    "text": bounded_text,
+                    "citations": bounded_citations,
+                },
+                sort_keys=True,
+                separators=(",", ":"),
+            ).encode("utf-8")
+        ).hexdigest()[:32]
         patch = create_patch(
             self.db,
             self.context,
@@ -104,10 +121,10 @@ class GroundloomAgentServices:
             PatchCreate(
                 base_content_version_id=version.id,
                 operations=[operation],
-                summary=summary[:2_000],
+                summary=bounded_summary,
                 idempotency_key=(
                     f"deepagents:{self.context.workspace_id}:"
-                    f"{self.project_id}:{version.id}:{summary[:80]}"
+                    f"{self.project_id}:{request_fingerprint}"
                 ),
             ),
         )

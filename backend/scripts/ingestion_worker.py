@@ -6,10 +6,10 @@ entrypoint repeatedly in deployment; leases make worker death recoverable.
 
 import argparse
 
+from app.application.sources import run_ingestion_worker_once
 from app.config import get_settings
 from app.context import RuntimeContext
 from app.db import prepare_worker_database
-from app.services import run_ingestion_worker_once
 
 if __name__ == "__main__":
     settings = get_settings()

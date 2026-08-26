@@ -1,5 +1,6 @@
 import logging
 
+import pytest
 from app.config import Settings
 from app.context import RuntimeContext
 from app.main import create_app
@@ -20,6 +21,12 @@ def test_deep_agent_runtime_without_postgres_checkpoint_fails_fast_not_retried(t
     fixed configuration error: it must fail on the first attempt (no
     retry-with-backoff), be marked non-retryable, name the fix, and be
     logged server-side rather than silently swallowed."""
+    # DeepAgentsAgentRuntime.__init__ imports deepagents before it ever gets
+    # to the checkpoint-backend check this test exercises, so without the
+    # `agent` extra installed the run fails one step earlier than expected
+    # ("install the pinned agent extra" instead of the checkpoint message) —
+    # skip rather than misreport a real config-gate failure as broken here.
+    pytest.importorskip("deepagents")
     settings = Settings(
         database_url=f"sqlite:///{tmp_path / 'misconfigured.db'}",
         object_store_path=tmp_path / "objects",

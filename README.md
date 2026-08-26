@@ -69,9 +69,12 @@ The root editable install already includes it.
 
 ```
 backend/app/            FastAPI application: routes, services, persistence, auth
+backend/app/application/ Cross-cutting deterministic audit, events, idempotency,
+                         operational health, and local checkpoint services
 backend/app/ai/         Deep Agents composition root (agent.py), tools, subagents,
                          middleware, prompts, retrieval, evaluation
-backend/app/integrations/ai/   Authorized backend adapter the AI package consumes
+backend/app/integrations/     Authorized AI adapter plus document parsing/chunking,
+                         derived indexing, and export rendering infrastructure
 backend/scripts/        Migrations, workers, evals, docs validation, backup/restore
 backend/tests/          pytest suite (unit, contract, and real-graph integration tests)
 packages/groundloom-agent-harness/  Reusable, framework-agnostic Deep Agents
@@ -90,9 +93,10 @@ docker/, docker-compose.yml   Postgres/pgvector + MinIO for deployment-shaped
 2. [`docs/README.md`](docs/README.md) — the normative document order.
 3. [`docs/architecture/system-architecture.md`](docs/architecture/system-architecture.md) — full system architecture.
 4. [`docs/architecture/ai-contribution-boundary.md`](docs/architecture/ai-contribution-boundary.md) — where AI implementation lives and how it's bounded.
-5. [`docs/deepagents/subagent-architecture.md`](docs/deepagents/subagent-architecture.md) — the specialist subagent roster and delegation model.
-6. [`docs/governance/assumptions-risks-open-questions.md`](docs/governance/assumptions-risks-open-questions.md) — open questions and known gaps.
-7. [`docs/validation/release-gates.md`](docs/validation/release-gates.md) — release gates that require external infrastructure or release-owner evidence.
+5. [`docs/architecture/backend-architecture-assessment.md`](docs/architecture/backend-architecture-assessment.md) — current backend flow, ownership, findings, and prioritized decomposition.
+6. [`docs/deepagents/subagent-architecture.md`](docs/deepagents/subagent-architecture.md) — the specialist subagent roster and delegation model.
+7. [`docs/governance/assumptions-risks-open-questions.md`](docs/governance/assumptions-risks-open-questions.md) — open questions and known gaps.
+8. [`docs/validation/release-gates.md`](docs/validation/release-gates.md) — release gates that require external infrastructure or release-owner evidence.
 
 ## Validation
 

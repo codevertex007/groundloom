@@ -4,6 +4,11 @@ from pathlib import Path
 
 import pytest
 from app.ai.persistence.checkpoints import PostgresCheckpointProvider, build_checkpoint_provider
+from app.application.sources import (
+    claim_index_rebuild_jobs,
+    claim_ingestion_jobs,
+    run_ingestion_worker_once,
+)
 from app.auth import issue_context_token
 from app.config import Settings
 from app.context import RuntimeContext
@@ -11,10 +16,63 @@ from app.errors import GroundloomError
 from app.main import create_app
 from app.models import AgentRun, IngestionJob, SourceVersion
 from app.object_store import LocalObjectStore, S3ObjectStore
-from app.services import run_agent_worker_once, run_ingestion_worker_once
+from app.services import (
+    claim_agent_runs,
+    claim_delegated_tasks,
+    claim_deletion_requests,
+    claim_export_jobs,
+    run_agent_worker_once,
+)
 from app.telemetry import LangfuseTelemetry
 from fastapi.testclient import TestClient
 from scripts.backup_local import build_manifest, copy_tree, restore_backup, verify_manifest
+
+
+def test_all_durable_worker_claims_request_skip_locked_row_locks():
+    class RecordingQuery:
+        def __init__(self):
+            self.lock: dict | None = None
+
+        def filter(self, *_args):
+            return self
+
+        def order_by(self, *_args):
+            return self
+
+        def limit(self, *_args):
+            return self
+
+        def with_for_update(self, **kwargs):
+            self.lock = kwargs
+            return self
+
+        def all(self):
+            return []
+
+    class RecordingSession:
+        def __init__(self):
+            self.queries: list[RecordingQuery] = []
+
+        def query(self, *_args):
+            query = RecordingQuery()
+            self.queries.append(query)
+            return query
+
+        def commit(self):
+            return None
+
+    calls = (
+        lambda db: claim_agent_runs(db, "worker"),
+        lambda db: claim_delegated_tasks(db, "workspace", "worker"),
+        lambda db: claim_ingestion_jobs(db, "workspace", "worker"),
+        lambda db: claim_index_rebuild_jobs(db, "workspace", "worker"),
+        lambda db: claim_export_jobs(db, "workspace", "worker"),
+        lambda db: claim_deletion_requests(db, "workspace", "worker"),
+    )
+    for call in calls:
+        db = RecordingSession()
+        assert call(db) == []
+        assert db.queries[-1].lock == {"skip_locked": True}
 
 
 def test_local_object_store_rejects_escape_and_round_trips(tmp_path: Path):

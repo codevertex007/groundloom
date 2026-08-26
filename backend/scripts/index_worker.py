@@ -1,9 +1,9 @@
 """Deterministic derived lexical-index rebuild worker."""
 
+from app.application.sources import run_index_rebuild_worker_once
 from app.config import get_settings
 from app.context import RuntimeContext
 from app.db import prepare_worker_database
-from app.services import run_index_rebuild_worker_once
 
 
 def main() -> None:

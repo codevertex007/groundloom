@@ -6,6 +6,15 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, Response, StreamingResponse
 from sqlalchemy.orm import Session
 
+from .application.audit import audit, list_audit_events
+from .application.idempotency import remember_idempotency
+from .application.operations import operational_snapshot
+from .application.sources import (
+    list_sources,
+    read_passage,
+    request_index_rebuild,
+    upload_source,
+)
 from .auth import issue_download_token, verify_context_token, verify_download_token
 from .config import Settings, get_settings
 from .context import RuntimeContext, resolve_context
@@ -70,7 +79,6 @@ from .schemas import (
 from .services import (
     accept_outline,
     accept_patch,
-    audit,
     author_skill_draft,
     content_blocks,
     create_patch,
@@ -81,23 +89,17 @@ from .services import (
     fork_skill,
     get_retention_policy,
     get_workspace_preferences,
-    list_audit_events,
     list_project_page,
     list_run_approvals,
     list_skills,
-    list_sources,
-    operational_snapshot,
     patch_out,
     project_detail,
     project_dto,
     publish_skill,
     read_memory,
-    read_passage,
     reconcile_delegated_tasks,
     reject_patch,
-    remember_idempotency,
     repair_skill_draft,
-    request_index_rebuild,
     request_project_deletion,
     resolve_approval,
     retry_delegated_task,
@@ -105,7 +107,6 @@ from .services import (
     start_run,
     update_retention_policy,
     update_workspace_preferences,
-    upload_source,
     validate_content,
     validate_skill,
     validation_dto,

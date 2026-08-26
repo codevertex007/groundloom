@@ -4,7 +4,15 @@ from types import SimpleNamespace
 
 import pytest
 from groundloom_harness import BudgetCounter
-from groundloom_harness.skills_backend import ReadOnlySkillBackend, SkillPackage
+
+# groundloom_harness.skills_backend imports deepagents.backends at module
+# level (it implements deepagents' BackendProtocol), so importing it here
+# unconditionally would fail collection of this whole file — whose entire
+# purpose is exercising the optional deepagents integration — wherever the
+# `agent` extra isn't installed, rather than skipping gracefully like every
+# test below already tries to do with its own importorskip("deepagents").
+pytest.importorskip("deepagents")
+from groundloom_harness.skills_backend import ReadOnlySkillBackend, SkillPackage  # noqa: E402
 
 
 def test_pinned_deepagents_graph_compiles_without_provider_credentials():
@@ -45,7 +53,17 @@ def test_groundloom_deepagents_runtime_builds_scoped_harness_without_credentials
         model_name="ignored-for-fake-probe",
         checkpoint_backend="postgres",
     )
+    registered_profiles = []
+    register_profile = deepagents.register_harness_profile
+
+    def capture_profile(key, profile):
+        registered_profiles.append((key, profile))
+        register_profile(key, profile)
+
+    monkeypatch.setattr(deepagents, "register_harness_profile", capture_profile)
     runtime = DeepAgentsAgentRuntime(settings)
+    assert registered_profiles[-1][0] == "openai"
+    assert registered_profiles[-1][1].general_purpose_subagent.enabled is False
 
     class FakeServices:
         def list_packages(self):

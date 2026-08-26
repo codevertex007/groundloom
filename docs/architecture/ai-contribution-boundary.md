@@ -11,6 +11,7 @@ keeping one integrated product contract.
 | Agent composition | `backend/app/ai/agent.py`, `middleware/`, `runtime/`, `persistence/`, tools and subagents | Authorized `backend/app/integrations/ai/` implementations, jobs, approvals, canonical writes |
 | Prompt assets | `backend/app/ai/prompts/*.txt`, reviewed and versioned with the runtime | Prompt version provenance and release/configuration validation |
 | Retrieval/evaluation | `backend/app/ai/retrieval/`, `evaluation/`, and `common/provider_http.py` | Source scope and SQL repository in `backend/app/integrations/ai/`; citation lineage, derived-index lifecycle, deterministic validation invariants |
+| Deterministic ingestion/export infrastructure | No model authority; the pinned LangChain splitter is consumed only through the document adapter | `backend/app/integrations/documents/`, `integrations/exports/`, and `integrations/ai/indexing.py` own parsing, derived-index persistence, and binary rendering |
 | AI frontend | `frontend/src/ai/` focused agent/activity and AI skill-author components | Screen composition, API transport, canonical state and permissions |
 
 There are no flat AI compatibility modules or obsolete import shims in `app/`.
@@ -45,3 +46,6 @@ traceability row, security tests, and this ownership map in one change.
 Neither side may grant the model unrestricted SQL, shell, filesystem, network,
 credentials, object storage, or tenant scope. Agent-generated changes remain
 reviewable proposals until deterministic application commands accept them.
+The cross-cutting deterministic audit, event/outbox, idempotency, operational,
+and local-checkpoint services live under `backend/app/application/`; model-facing
+code does not import those modules directly.

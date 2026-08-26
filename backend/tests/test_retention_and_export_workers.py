@@ -6,9 +6,10 @@ from zipfile import ZipFile
 
 from app.config import Settings
 from app.context import RuntimeContext
+from app.integrations.exports import render_content
 from app.main import create_app
 from app.models import DeletionRequest, ExportJob, Project, SourceVersion
-from app.services import render_content, run_deletion_worker_once, run_export_worker_once
+from app.services import run_deletion_worker_once, run_export_worker_once
 from fastapi.testclient import TestClient
 
 
