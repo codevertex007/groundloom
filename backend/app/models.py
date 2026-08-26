@@ -12,6 +12,22 @@ def utcnow() -> datetime:
     return datetime.now(UTC)
 
 
+def as_aware_utc(value: datetime) -> datetime:
+    """Normalize a datetime read back from storage to UTC-aware.
+
+    SQLite has no native timezone-aware datetime type: a `DateTime(timezone=True)`
+    column stores the ISO string correctly but SQLAlchemy's SQLite dialect
+    reads it back naive, while values built in Python via `utcnow()` are
+    always aware. Postgres round-trips tzinfo correctly, so this is a no-op
+    there. Every comparison or subtraction against a column value read fresh
+    from the database must go through this first, or it can raise
+    `TypeError: can't subtract offset-naive and offset-aware datetimes` — this
+    already happened once and was fixed inline at the export-download route;
+    this is that fix, generalized so it isn't re-derived per call site.
+    """
+    return value if value.tzinfo is not None else value.replace(tzinfo=UTC)
+
+
 JsonType = JSON().with_variant(JSONB, "postgresql")
 
 

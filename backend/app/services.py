@@ -64,6 +64,7 @@ from .models import (
     WorkerHeartbeat,
     Workspace,
     WorkspacePreference,
+    as_aware_utc,
     utcnow,
 )
 from .object_store import build_object_store
@@ -170,7 +171,7 @@ def operational_snapshot(db: Session, settings: Settings) -> dict[str, Any]:
     )
     worker_status = "unknown"
     if heartbeat:
-        age = (now - heartbeat.last_seen).total_seconds()
+        age = (now - as_aware_utc(heartbeat.last_seen)).total_seconds()
         worker_status = (
             "ok" if age <= settings.worker_heartbeat_timeout_seconds else "stale"
         )
@@ -184,7 +185,7 @@ def operational_snapshot(db: Session, settings: Settings) -> dict[str, Any]:
             .first()
         )
         if row and row[0]:
-            age = max(0.0, (now - row[0]).total_seconds())
+            age = max(0.0, (now - as_aware_utc(row[0])).total_seconds())
             queue_age = age if queue_age is None else max(queue_age, age)
     return {
         "checkpointer": "local" if settings.checkpoint_backend == "local" else "configured",

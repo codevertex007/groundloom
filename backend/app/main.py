@@ -1,6 +1,5 @@
 import json
 from collections.abc import Generator
-from datetime import UTC
 
 from fastapi import Depends, FastAPI, File, Header, Query, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -26,6 +25,7 @@ from .models import (
     Project,
     PublicEvent,
     Skill,
+    as_aware_utc,
     utcnow,
 )
 from .object_store import build_object_store
@@ -1057,9 +1057,7 @@ def register_routes(app: FastAPI) -> FastAPI:
         if not job or job.status != "completed" or not job.object_key:
             raise GroundloomError("RESOURCE_NOT_FOUND", "The artifact was not found.", 404)
         expires_at = job.expires_at
-        if expires_at and expires_at.tzinfo is None:
-            expires_at = expires_at.replace(tzinfo=UTC)
-        if expires_at and expires_at <= utcnow():
+        if expires_at and as_aware_utc(expires_at) <= utcnow():
             raise GroundloomError("RESOURCE_NOT_FOUND", "The artifact was not found.", 404)
         try:
             data = request.app.state.object_store.get_bytes(job.object_key)

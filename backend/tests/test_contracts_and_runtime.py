@@ -9,8 +9,9 @@ from app.db import build_session_factory, init_database, prepare_worker_database
 from app.errors import GroundloomError
 from app.ids import new_id
 from app.main import create_app
-from app.models import OutboxMessage
+from app.models import DeletionRequest, OutboxMessage
 from app.outbox import publish_pending
+from app.services import touch_worker_heartbeat
 from app.telemetry import LocalTelemetry, build_telemetry
 from fastapi.testclient import TestClient
 
@@ -121,6 +122,63 @@ def test_health_readiness_and_liveness_expose_bounded_operational_state(tmp_path
     assert len(body["config_fingerprint"]) == 16
     assert body["oldest_queue_age_seconds"] is None or body["oldest_queue_age_seconds"] >= 0
     assert body["warnings"] == []
+
+
+def test_health_survives_a_worker_heartbeat_read_back_from_sqlite(tmp_path):
+    """Regression test: SQLite has no native timezone-aware datetime type, so
+    a WorkerHeartbeat.last_seen read back fresh from storage comes back
+    naive while utcnow() is aware. Subtracting them used to raise
+    `TypeError: can't subtract offset-naive and offset-aware datetimes` and
+    turned every GET /health and /ready into an unhandled 500 the moment any
+    worker had ever run — reproduced live via `python
+    backend/scripts/ingestion_worker.py --once` against a persistent db,
+    then GET /health."""
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'heartbeat.db'}",
+        object_store_path=tmp_path / "objects",
+    )
+    app = create_app(settings)
+    with app.state.session_factory() as db:
+        touch_worker_heartbeat(db, "worker-1", "ingestion", status="healthy")
+        db.commit()
+
+    # A fresh TestClient request opens a new session, forcing SQLAlchemy to
+    # issue a real SELECT and read the heartbeat back from SQLite rather than
+    # reusing the in-memory (still-aware) object from the write above.
+    api = TestClient(app)
+    body = api.get("/health").json()
+    assert body["status"] == "ok"
+    assert body["worker_heartbeat"] in {"ok", "stale"}
+
+
+def test_health_survives_a_queued_job_created_at_read_back_from_sqlite(tmp_path):
+    """Same naive/aware SQLite gap as the heartbeat regression above, hit via
+    the oldest_queue_age_seconds calculation instead: any of the six
+    queued/pending models' `created_at` can trigger the identical
+    `now - <naive db value>` TypeError once read back fresh from storage."""
+    settings = Settings(
+        database_url=f"sqlite:///{tmp_path / 'queue-age.db'}",
+        object_store_path=tmp_path / "objects",
+    )
+    app = create_app(settings)
+    with app.state.session_factory() as db:
+        db.add(
+            DeletionRequest(
+                id=new_id("del"),
+                workspace_id=settings.local_workspace_id,
+                scope_type="project",
+                resource_id="prj_probe",
+                requested_by=settings.local_user_id,
+                status="pending",
+            )
+        )
+        db.commit()
+
+    api = TestClient(app)
+    body = api.get("/health").json()
+    assert body["status"] == "ok"
+    assert body["oldest_queue_age_seconds"] is not None
+    assert body["oldest_queue_age_seconds"] >= 0
 
 
 def test_health_warns_when_model_provider_and_checkpoint_backend_are_mismatched(tmp_path):
