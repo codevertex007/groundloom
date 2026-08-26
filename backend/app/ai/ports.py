@@ -7,7 +7,7 @@ authorization and tenant scope have been established by trusted application code
 from typing import TYPE_CHECKING, Any, Protocol
 
 if TYPE_CHECKING:
-    from groundloom_harness.skills_backend import SkillPackage
+    from groundloom_harness import SkillPackage
 
 
 class AgentServicePort(Protocol):

@@ -5,7 +5,7 @@ import json
 from dataclasses import dataclass
 from typing import Any
 
-from groundloom_harness.skills_backend import SkillPackage
+from groundloom_harness import SkillPackage
 from sqlalchemy.orm import Session
 
 from ...application.sources import read_passage

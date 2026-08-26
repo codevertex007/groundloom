@@ -3,16 +3,16 @@ from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
-from groundloom_harness import BudgetCounter
+from groundloom_harness import BudgetCounter, SkillPackage
 
-# groundloom_harness.skills_backend imports deepagents.backends at module
-# level (it implements deepagents' BackendProtocol), so importing it here
-# unconditionally would fail collection of this whole file — whose entire
-# purpose is exercising the optional deepagents integration — wherever the
-# `agent` extra isn't installed, rather than skipping gracefully like every
-# test below already tries to do with its own importorskip("deepagents").
+# ReadOnlySkillBackend (unlike SkillPackage above) needs deepagents.backends
+# at module level, so importing it unconditionally would fail collection of
+# this whole file — whose entire purpose is exercising the optional
+# deepagents integration — wherever the `agent` extra isn't installed,
+# rather than skipping gracefully like every test below already tries to do
+# with its own importorskip("deepagents").
 pytest.importorskip("deepagents")
-from groundloom_harness.skills_backend import ReadOnlySkillBackend, SkillPackage  # noqa: E402
+from groundloom_harness.skills_backend import ReadOnlySkillBackend  # noqa: E402
 
 
 def test_pinned_deepagents_graph_compiles_without_provider_credentials():

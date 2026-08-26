@@ -7,6 +7,7 @@ keep ownership of their models, prompts, tools, subagents, and persistence.
 from .budgets import BudgetCounter, BudgetExceeded
 from .context import CancellationCheck, EventSink, HarnessRuntimeContext
 from .policy import DEFAULT_EXCLUDED_TOOLS, ToolPolicy
+from .skills import SkillPackage, SkillSource
 
 __all__ = [
     "BudgetCounter",
@@ -15,5 +16,7 @@ __all__ = [
     "DEFAULT_EXCLUDED_TOOLS",
     "EventSink",
     "HarnessRuntimeContext",
+    "SkillPackage",
+    "SkillSource",
     "ToolPolicy",
 ]

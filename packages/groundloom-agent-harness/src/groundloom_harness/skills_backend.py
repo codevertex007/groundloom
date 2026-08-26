@@ -1,11 +1,18 @@
-"""Read-only Deep Agents backend for immutable, application-owned skills."""
+"""Read-only Deep Agents backend for immutable, application-owned skills.
+
+``SkillPackage``/``SkillSource`` used to live in this module too, but they
+carry no deepagents dependency of their own — only ``ReadOnlySkillBackend``
+does, since it implements deepagents' ``BackendProtocol``. They now live in
+``.skills`` and are re-exported here for backward compatibility; import from
+``.skills`` (or the package root) directly if you don't need
+``ReadOnlySkillBackend`` and want to avoid requiring the optional `agent`
+extra just to import this module.
+"""
 
 from __future__ import annotations
 
 import fnmatch
-from dataclasses import dataclass, field
 from pathlib import PurePosixPath
-from typing import Protocol
 
 from deepagents.backends import BackendProtocol
 from deepagents.backends.protocol import (
@@ -22,43 +29,11 @@ from deepagents.backends.protocol import (
     WriteResult,
 )
 
+from .skills import SkillPackage, SkillSource
+
+__all__ = ["ReadOnlySkillBackend", "SkillPackage", "SkillSource"]
+
 _ROOT = "/skills/project"
-
-
-def _relative_path(value: str) -> str:
-    path = PurePosixPath(value.replace("\\", "/"))
-    if path.is_absolute() or not path.parts or ".." in path.parts or "." in path.parts:
-        raise ValueError(f"Invalid skill resource path: {value}")
-    return str(path)
-
-
-@dataclass(frozen=True)
-class SkillPackage:
-    """One immutable SKILL.md package and its optional supporting resources."""
-
-    slug: str
-    skill_md: str
-    resources: dict[str, str | bytes] = field(default_factory=dict)
-
-    def files(self) -> dict[str, bytes]:
-        if not self.slug or any(
-            char not in "abcdefghijklmnopqrstuvwxyz0123456789-" for char in self.slug
-        ):
-            raise ValueError(f"Invalid skill slug: {self.slug}")
-        if not self.skill_md.strip():
-            raise ValueError("SKILL.md content cannot be empty")
-        files = {"SKILL.md": self.skill_md.encode("utf-8")}
-        for raw_path, content in self.resources.items():
-            path = _relative_path(raw_path)
-            if path == "SKILL.md":
-                raise ValueError("Skill resources cannot replace SKILL.md")
-            files[path] = content.encode("utf-8") if isinstance(content, str) else bytes(content)
-        return files
-
-
-class SkillSource(Protocol):
-    def list_packages(self) -> tuple[SkillPackage, ...]:
-        """Return an immutable snapshot already authorized by the application."""
 
 
 class ReadOnlySkillBackend(BackendProtocol):
