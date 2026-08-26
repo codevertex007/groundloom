@@ -6,7 +6,7 @@
 
 **A source-grounded knowledge production studio.** One persistent Deep Agent per project investigates sources, plans work, delegates bounded tasks to specialist subagents, drafts structured content, and proposes every change for your review — nothing it writes becomes canonical until you accept it.
 
-![Groundloom workspace: an outline with a proposed, source-grounded draft awaiting review, alongside the Copilot panel's run trail and review checklist](docs/assets/screenshots/workspace-proposal.png)
+![Groundloom workspace: a generated module with typed content blocks — heading, paragraph, a learning-objectives callout, a warning callout, and a note callout — alongside the Copilot panel's run trail and review checklist](docs/assets/screenshots/workspace-content.png)
 
 ## What it is
 
