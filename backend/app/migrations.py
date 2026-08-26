@@ -20,6 +20,7 @@ ACTIVE_AGENT_TURN_MIGRATION_ID = "012_active_agent_turn_uniqueness"
 WORKER_ROLE_RLS_MIGRATION_ID = "013_worker_role_rls_boundary"
 PROJECT_PRIMARY_KEY_MIGRATION_ID = "014_project_id_primary_key"
 PGVECTOR_INDEX_MIGRATION_ID = "015_pgvector_source_embeddings"
+CONTENT_BLOCK_PRIMARY_KEY_MIGRATION_ID = "016_content_block_version_scoped_primary_key"
 
 _RLS_WORKSPACE_TABLES = (
     "workspace_preferences",
@@ -86,6 +87,24 @@ def apply_migrations(database_url: str) -> None:
                 if project_pk == ["workspace_id", "id"]:
                     connection.execute(text("ALTER TABLE projects DROP CONSTRAINT projects_pkey"))
                     connection.execute(text("ALTER TABLE projects ADD PRIMARY KEY (id)"))
+            if inspector.has_table("content_blocks"):
+                block_pk = inspector.get_pk_constraint("content_blocks").get("constrained_columns")
+                if block_pk == ["id"]:
+                    # accept_patch() carries a block's logical id forward
+                    # unchanged into every later version it survives into
+                    # (see ContentBlock's docstring), so `id` alone can no
+                    # longer be the primary key once a project has more than
+                    # one content version. Existing rows are already unique
+                    # on plain `id`, so widening to (content_version_id, id)
+                    # cannot collide.
+                    connection.execute(
+                        text("ALTER TABLE content_blocks DROP CONSTRAINT content_blocks_pkey")
+                    )
+                    connection.execute(
+                        text(
+                            "ALTER TABLE content_blocks ADD PRIMARY KEY (content_version_id, id)"
+                        )
+                    )
     Base.metadata.create_all(engine)
     with engine.begin() as connection:
         connection.execute(
@@ -109,6 +128,7 @@ def apply_migrations(database_url: str) -> None:
             WORKER_ROLE_RLS_MIGRATION_ID,
             PROJECT_PRIMARY_KEY_MIGRATION_ID,
             PGVECTOR_INDEX_MIGRATION_ID,
+            CONTENT_BLOCK_PRIMARY_KEY_MIGRATION_ID,
         ]
         preference_columns = {
             column["name"] for column in inspect(engine).get_columns("workspace_preferences")

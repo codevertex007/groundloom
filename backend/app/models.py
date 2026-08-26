@@ -338,12 +338,23 @@ class ContentVersion(TimeStamped, Base):
 
 
 class ContentBlock(TimeStamped, Base):
+    """One block within one immutable content version.
+
+    `id` is a *logical* block identity: accept_patch() intentionally carries
+    it forward unchanged across versions so patch operations (after_block_id,
+    block_id) and citations keep addressing "the same block" across the
+    project's whole edit history, even though each version gets its own
+    fresh row. Composite primary key (content_version_id, id) — not `id`
+    alone — is what makes that legal: the same logical id recurs once per
+    version it survives into, never twice within one version.
+    """
+
     __tablename__ = "content_blocks"
+    content_version_id: Mapped[str] = mapped_column(
+        ForeignKey("content_versions.id"), primary_key=True
+    )
     id: Mapped[str] = mapped_column(String(80), primary_key=True)
     workspace_id: Mapped[str] = mapped_column(String(80), nullable=False, index=True)
-    content_version_id: Mapped[str] = mapped_column(
-        ForeignKey("content_versions.id"), nullable=False, index=True
-    )
     block_type: Mapped[str] = mapped_column(String(40), nullable=False)
     order_no: Mapped[int] = mapped_column(Integer, nullable=False)
     payload: Mapped[dict] = mapped_column(JsonType, default=dict, nullable=False)

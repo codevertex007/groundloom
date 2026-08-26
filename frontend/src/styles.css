@@ -7,9 +7,15 @@
     BlinkMacSystemFont,
     "Segoe UI",
     sans-serif;
+  font-synthesis: none;
+}
+/* Light theme: opted into explicitly via the sidebar toggle
+   (data-theme="light" on <html>, kept in sync with the dark defaults
+   below via the same variable names). Dark is the unscoped default so the
+   app's default appearance never depends on this attribute being set. */
+:root[data-theme="light"] {
   color: #262521;
   background: #f4f1ea;
-  font-synthesis: none;
   --bg: #f4f1ea;
   --panel: #fbfaf6;
   --panel-2: #f0ede5;
@@ -22,7 +28,11 @@
   --accent-2: #b8543a;
   --accent-soft: #f2d9ce;
   --green: #357054;
+  --warn-bg: #fbeedd;
+  --warn-text: #a8681e;
+  --warn-border: #eecfa1;
   --shadow: 0 14px 34px rgba(47, 39, 30, 0.12);
+  color-scheme: light;
 }
 * {
   box-sizing: border-box;
@@ -1078,7 +1088,7 @@ button {
   border-bottom: 1px solid var(--border);
 }
 .content-block:hover {
-  background: #f2efe7;
+  background: var(--panel-2);
 }
 .block-label {
   font:
@@ -1099,7 +1109,7 @@ button {
     serif;
   max-width: 650px;
   margin: 9px 0 0;
-  color: #3f3a34;
+  color: var(--text);
   white-space: pre-line;
 }
 .content-block ol,
@@ -1110,7 +1120,7 @@ button {
   max-width: 650px;
   margin: 10px 0 0 22px;
   padding: 0;
-  color: #3f3a34;
+  color: var(--text);
 }
 .content-block li + li {
   margin-top: 6px;
@@ -1127,7 +1137,7 @@ button {
   width: 100%;
   border-collapse: collapse;
   font-size: 12px;
-  color: #3f3a34;
+  color: var(--text);
 }
 .typed-table th,
 .typed-table td {
@@ -1161,7 +1171,7 @@ button {
 }
 .figure-placeholder figcaption {
   margin-top: 8px;
-  color: #3f3a34;
+  color: var(--text);
   font:
     400 13px/1.5 Georgia,
     serif;
@@ -1875,6 +1885,9 @@ button {
   --accent-2: #3f79e0;
   --accent-soft: rgba(91, 147, 240, 0.15);
   --green: #4ade80;
+  --warn-bg: rgba(240, 180, 41, 0.09);
+  --warn-text: #f0b429;
+  --warn-border: rgba(240, 180, 41, 0.35);
   --shadow: none;
   color-scheme: dark;
 }
