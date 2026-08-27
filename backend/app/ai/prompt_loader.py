@@ -19,6 +19,7 @@ _PROMPT_NAMES = frozenset(
         "module_writer_system.txt",
         "module_writer_description.txt",
         "evaluator_system.txt",
+        "skill_author_system.txt",
         "middleware_policy.txt",
     }
 )

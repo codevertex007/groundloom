@@ -12,11 +12,12 @@ strong hits, deduplicate normalized duplicate passages, and return the final
 bounded bundle. PostgreSQL uses the same pipeline after pgvector candidate
 search and reports `hybrid.pgvector.v2`.
 
-The default reranker is deterministic overlap/phrase scoring. A narrow
-Cohere-compatible HTTP adapter may be configured through the reranker settings;
-outages, rejected requests, incomplete results, and malformed scores become
-typed redacted errors. Reranking never changes authorization, source-version
-selection, or citation lineage.
+The default reranker is deterministic overlap/phrase scoring. A configured
+Cohere provider uses the pinned LangChain `CohereRerank` integration and Cohere
+v2 SDK client; outages, rejected requests, incomplete results, and malformed
+scores become typed redacted errors. Reranking never changes authorization,
+source-version selection, or citation lineage. This provider-mechanism detail
+was amended by ADR-035.
 
 ## Consequences
 

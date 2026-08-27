@@ -1,6 +1,7 @@
 import logging
 
 import pytest
+from app.ai.skill_author import SkillAuthorResult
 from app.config import Settings
 from app.context import RuntimeContext
 from app.main import create_app
@@ -104,7 +105,9 @@ def test_partial_delegation_retry_is_bounded_and_reconciled(tmp_path):
             assert db.query(DelegatedTask).filter_by(id=task_id).one().status == "completed"
 
 
-def test_skill_author_endpoint_creates_draft_only_and_provider_failure_is_explicit(tmp_path):
+def test_skill_author_endpoint_creates_local_and_provider_drafts_without_publishing(
+    tmp_path, monkeypatch
+):
     settings = Settings(
         database_url=f"sqlite:///{tmp_path / 'skill-author.db'}",
         object_store_path=tmp_path / "objects",
@@ -126,15 +129,43 @@ def test_skill_author_endpoint_creates_draft_only_and_provider_failure_is_explic
         database_url=f"sqlite:///{tmp_path / 'skill-provider.db'}",
         object_store_path=tmp_path / "provider-objects",
         model_provider="openai",
+        model_name="gpt-4o-mini",
     )
-    with TestClient(create_app(provider_settings)) as api:
-        unavailable = api.post(
+    captured = {}
+
+    def fake_author(settings, **kwargs):
+        captured.update({"settings": settings, **kwargs})
+        return SkillAuthorResult(
+            slug="provider-draft",
+            name="Provider draft",
+            description="A bounded provider-authored draft.",
+            content="# Provider draft\n\nReview this before publication.",
+        )
+
+    monkeypatch.setattr("app.services.author_skill_package", fake_author)
+    provider_app = create_app(provider_settings)
+    with TestClient(provider_app) as api:
+        authored = api.post(
             "/v1/skills/ai-drafts",
             headers=headers(),
-            json={"objective": "Provider-authored skill"},
+            json={
+                "objective": "Provider-authored skill",
+                "suggested_name": "Reviewed provider draft",
+            },
         )
-        assert unavailable.status_code == 503
-        assert unavailable.json()["retryable"] is True
+        assert authored.status_code == 201
+        assert authored.json()["status"] == "draft"
+        assert authored.json()["slug"] == "provider-draft"
+        assert captured["objective"] == "Provider-authored skill"
+        assert captured["suggested_name"] == "Reviewed provider draft"
+        with provider_app.state.session_factory() as db:
+            stored = db.get(SkillVersion, authored.json()["id"])
+            assert stored is not None
+            assert stored.package_json["generation"] == {
+                "provider": "openai",
+                "model": "gpt-4o-mini",
+                "prompt_version": "groundloom.skill-author.prompt.v1",
+            }
 
 
 def test_skill_repair_creates_immutable_version_then_validates_and_publishes(tmp_path):

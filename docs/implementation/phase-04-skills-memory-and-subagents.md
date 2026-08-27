@@ -4,7 +4,7 @@
 
 - [x] `IMPL-04-001` Skill package storage, versioning, resolver, scoped backend projection.
 - [x] `IMPL-04-002` Validation/publish workflow, role/approval, starter packages.
-- [x] `IMPL-04-003` Dedicated `/skills/ai-drafts` draft-only author boundary; local output is explicit deterministic scaffolding and configured external providers fail clearly until wired.
+- [x] `IMPL-04-003` Dedicated `/skills/ai-drafts` draft-only author boundary; local output is explicit deterministic scaffolding and configured providers use one bounded LangChain structured-output call with pinned generation provenance. Validation and publication remain separate commands.
 - [x] `IMPL-04-004` Typed scoped memory service/projection and approval/audit policy.
 - [x] `IMPL-04-005` Specialist task contract and bounded source/outline/module delegation records.
 - [x] `IMPL-04-006` Dynamic task execution with durable status, parent reconciliation, and a bounded leased delegated-task worker; local specialist execution is deterministic and production specialist models remain configured adapters.

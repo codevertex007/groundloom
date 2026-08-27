@@ -174,7 +174,7 @@ Groundloom should expose one primary project-agent runtime plus a small registry
 | Runtime / job | Framework | Purpose | Invocation pattern |
 |---|---|---|---|
 | `groundloom_project_agent` | `create_deep_agent` | Project creation, clarification, research, planning, outline/content generation, delegation, validation, revision, and ongoing canvas interaction | Persistent, multi-turn, streaming project thread |
-| `skill_author_agent` | `create_deep_agent` with structured output | Create or repair a SKILL.md package | Short agent session; approval before publication |
+| `skill_author_call` | LangChain provider-neutral chat model with structured output | Create one reviewable SKILL.md draft | One bounded call; deterministic validation and approval before publication |
 | Specialist subagents | Declarative, compiled, async, or dynamic Deep Agents subagents | Research, outline design, module drafting, citation audit, assessment, and review | Invoked by the primary project agent |
 | Validation hooks/tools | Deterministic code plus optional grader model | Enforce exact schemas, citation integrity, safety/style checks, budgets, and bounded review | Called by the primary agent; selected hooks run automatically |
 | `source_ingestion_job` | Deterministic workflow | Scan → parse → normalize → chunk → embed → index | Asynchronous infrastructure job |
@@ -503,7 +503,7 @@ Use provider/harness profiles to tune model-specific tool descriptions, middlewa
 
 | Deep Agents primitive | Groundloom usage | Important constraint |
 |---|---|---|
-| `create_deep_agent` | Build the primary project agent, skill author, and bounded specialist agents | It returns a compiled graph; keep construction centralized in an agent factory |
+| `create_deep_agent` | Build the primary project agent and bounded specialist agents | It returns a compiled graph; keep construction centralized in an agent factory; use a direct structured model call for single-result, tool-free work such as skill drafting |
 | Filesystem middleware | Scratch notes, skill packages, summaries, large tool-result offloads | Never make the virtual filesystem the sole canonical content store |
 | `StateBackend` | Thread-scoped scratch files and intermediate reasoning artifacts | Persistence depends on checkpointing and remains thread-scoped |
 | `StoreBackend` | Versioned skill/memory projections across threads | Namespace by assistant/workspace/user; shared policy should be read-only |
@@ -593,7 +593,9 @@ Validation should check:
 - sample trigger and non-trigger cases;
 - optional skill-specific evaluation cases.
 
-The AI skill author produces a draft only. Publication is a domain command.
+The AI skill author uses one bounded LangChain structured-output call and
+produces a draft only. It does not receive tools or publication authority.
+Validation and publication are separate domain commands.
 
 ### 8.4 Memory model
 

@@ -67,6 +67,12 @@ Skill repair never edits an existing version. `PUT
 next draft version for the same skill, records `repaired_from_version_id`, and
 accepts `Idempotency-Key`. Published bytes cannot be repaired in place.
 
+`POST /skills/ai-drafts` returns an unpublished draft. Local mode creates an
+explicit deterministic scaffold; a configured model uses one bounded
+LangChain structured-output call and records provider/model/prompt provenance.
+Neither path validates or publishes the package. Provider errors are redacted
+typed failures, and publication remains a separate authorized command.
+
 `POST /skills/{id}/fork` copies an authorized published starter, organization,
 or visible workspace skill into a new workspace-scoped draft. The fork never
 publishes automatically, accepts an optional replacement slug/name/description,

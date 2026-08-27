@@ -1,6 +1,3 @@
-import json
-
-import httpx
 import pytest
 from app.ai.evaluation.providers import (
     DeterministicSemanticGrader,
@@ -40,60 +37,51 @@ def test_evaluation_observation_uses_redacted_telemetry():
 def test_openai_compatible_semantic_grader_validates_structured_output(monkeypatch):
     calls = []
 
-    class Response:
-        status_code = 200
-
-        def json(self):
+    class Runnable:
+        def invoke(self, input):
+            calls.append(input)
             return {
-                "choices": [
-                    {
-                        "message": {
-                            "content": json.dumps(
-                                {
-                                    "score": 0.87,
-                                    "verdict": "pass",
-                                    "feedback": ["Evidence is sufficient."],
-                                }
-                            )
-                        }
-                    }
-                ]
+                "score": 0.87,
+                "verdict": "pass",
+                "feedback": ["Evidence is sufficient."],
             }
 
-    def post(url, **kwargs):
-        calls.append((url, kwargs))
-        return Response()
-
-    monkeypatch.setattr(httpx, "post", post)
     grader = OpenAICompatibleSemanticGrader(
         api_key="secret-do-not-log",
         base_url="https://grader.example/v1",
         model="grader-test",
+        runnable=Runnable(),
     )
     grade = grader.grade("Grounded evidence text", ["passage_1"], RubricVersion("rubric-v1"))
     assert grade.score == 0.87
     assert grade.verdict == "pass"
-    assert calls[0][0] == "https://grader.example/v1/chat/completions"
-    assert calls[0][1]["json"]["response_format"] == {"type": "json_object"}
+    assert "Grounded evidence text" in calls[0]["evaluation_input"]
 
-    class BadResponse(Response):
-        def json(self):
-            return {"choices": [{"message": {"content": '{"score": 2}'}}]}
+    class BadRunnable:
+        def invoke(self, _input):
+            return {"score": 2, "verdict": "pass", "feedback": []}
 
-    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: BadResponse())
+    bad_grader = OpenAICompatibleSemanticGrader(
+        api_key="secret-do-not-log",
+        base_url="https://grader.example/v1",
+        model="grader-test",
+        runnable=BadRunnable(),
+    )
     with pytest.raises(GroundloomError) as invalid:
-        grader.grade("text", [], RubricVersion("rubric-v1"))
+        bad_grader.grade("text", [], RubricVersion("rubric-v1"))
     assert invalid.value.code == "PROVIDER_INVALID_RESPONSE"
 
 
-def test_semantic_grader_outage_and_missing_configuration_are_typed(monkeypatch):
-    monkeypatch.setattr(
-        httpx, "post", lambda *_args, **_kwargs: (_ for _ in ()).throw(httpx.ConnectError("secret"))
-    )
+def test_semantic_grader_outage_and_missing_configuration_are_typed():
+    class UnavailableRunnable:
+        def invoke(self, _input):
+            raise RuntimeError("secret")
+
     grader = OpenAICompatibleSemanticGrader(
         api_key="secret-do-not-log",
         base_url="https://grader.example/v1",
         model="grader-test",
+        runnable=UnavailableRunnable(),
     )
     with pytest.raises(GroundloomError) as outage:
         grader.grade("text", [], RubricVersion("rubric-v1"))

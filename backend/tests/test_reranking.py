@@ -1,4 +1,3 @@
-import httpx
 import pytest
 from app.ai.retrieval.providers.reranking import (
     CohereCompatibleReranker,
@@ -28,49 +27,49 @@ def test_deterministic_reranker_is_stable_bounded_and_phrase_aware():
 def test_cohere_compatible_reranker_orders_and_validates_response(monkeypatch):
     calls = []
 
-    class Response:
-        status_code = 200
+    class Reranker:
+        def compress_documents(self, documents, query):
+            calls.append((query, [document.page_content for document in documents]))
+            documents[0].metadata["relevance_score"] = 0.9
+            documents[1].metadata["relevance_score"] = 0.2
+            return [documents[0], documents[1]]
 
-        def json(self):
-            return {
-                "results": [
-                    {"index": 1, "relevance_score": 0.2},
-                    {"index": 0, "relevance_score": 0.9},
-                ]
-            }
-
-    def post(url, **kwargs):
-        calls.append((url, kwargs))
-        return Response()
-
-    monkeypatch.setattr(httpx, "post", post)
     reranker = CohereCompatibleReranker(
         api_key="secret-do-not-log",
-        base_url="https://rerank.example/v1",
+        base_url="https://rerank.example",
         model="rerank-test",
+        reranker=Reranker(),
     )
     assert reranker.score("query", ["first", "second"]) == [0.9, 0.2]
-    assert calls[0][0] == "https://rerank.example/v1/rerank"
-    assert calls[0][1]["json"]["documents"] == ["first", "second"]
+    assert calls == [("query", ["first", "second"])]
 
-    class BadResponse(Response):
-        def json(self):
-            return {"results": [{"index": 3, "relevance_score": 0.4}]}
+    class BadReranker:
+        def compress_documents(self, documents, _query):
+            documents[0].metadata["groundloom_index"] = 3
+            documents[0].metadata["relevance_score"] = 0.4
+            return [documents[0]]
 
-    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: BadResponse())
+    bad_reranker = CohereCompatibleReranker(
+        api_key="secret-do-not-log",
+        base_url="https://rerank.example",
+        model="rerank-test",
+        reranker=BadReranker(),
+    )
     with pytest.raises(GroundloomError) as invalid:
-        reranker.score("query", ["one"])
+        bad_reranker.score("query", ["one"])
     assert invalid.value.code == "PROVIDER_INVALID_RESPONSE"
 
 
-def test_reranker_outage_and_missing_configuration_are_typed(monkeypatch):
-    monkeypatch.setattr(
-        httpx, "post", lambda *_args, **_kwargs: (_ for _ in ()).throw(httpx.ConnectError("secret"))
-    )
+def test_reranker_outage_and_missing_configuration_are_typed():
+    class UnavailableReranker:
+        def compress_documents(self, _documents, _query):
+            raise RuntimeError("secret")
+
     reranker = CohereCompatibleReranker(
         api_key="secret-do-not-log",
-        base_url="https://rerank.example/v1",
+        base_url="https://rerank.example",
         model="rerank-test",
+        reranker=UnavailableReranker(),
     )
     with pytest.raises(GroundloomError) as outage:
         reranker.score("query", ["one"])

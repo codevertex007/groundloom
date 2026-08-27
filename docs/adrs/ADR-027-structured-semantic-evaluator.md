@@ -7,9 +7,10 @@
 
 Keep the deterministic rubric grader as the mandatory local and invariant
 baseline, and add an optional OpenAI-compatible structured semantic evaluator
-behind the existing `Grader` protocol. The adapter sends bounded draft text,
-bounded citation IDs, and rubric metadata to a `/chat/completions` endpoint and
-accepts only a validated JSON object containing a score, verdict, and bounded
+behind the existing `Grader` protocol. As amended by ADR-035, the adapter uses
+LangChain `ChatPromptTemplate`, `ChatOpenAI`, and model-level Pydantic
+structured output. It sends bounded draft text, bounded citation IDs, and
+rubric metadata and accepts only a validated score, verdict, and bounded
 feedback strings.
 
 Semantic feedback is observational/review input. It cannot authorize a

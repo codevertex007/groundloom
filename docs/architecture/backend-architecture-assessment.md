@@ -64,8 +64,8 @@ The principal execution paths are:
 | Human approval | Keep deterministic product approval records for the current proposal-only tool surface. Native interrupts become necessary if a future model-visible tool can perform a guarded side effect. |
 | Skills | Keep the custom backend because it is an authorized immutable projection implementing Deep Agents' `BackendProtocol`; generic filesystem backends would broaden scope. |
 | Retrieval | Keep Groundloom's typed retrieval service/repository because tenant scope and immutable citation lineage are domain rules. Reuse the framework splitter only at the generic chunking seam. |
-| Model/provider calls | Keep narrow provider adapters with typed redacted errors. Generic retry middleware must not obscure product retry/idempotency semantics. |
-| Structured output | Continue Pydantic validation for HTTP/tool contracts and provider grader JSON. Specialist structured responses can be added when their output is consumed as data rather than prose. |
+| Model/provider calls | Use dedicated LangChain provider integrations for embeddings, Cohere reranking, semantic grading, and one bounded provider-neutral skill-author call; retain only bounded product validation and typed redacted error translation. |
+| Structured output | Use LangChain model-level structured output with Pydantic semantic-grade and skill-draft schemas, and LangChain `BaseTool` values with bounded Pydantic arguments for every model-facing tool. Use a direct model call rather than an agent when one typed result requires no tools or adaptive loop. |
 | Streaming/tracing | Keep native LangGraph `messages`/`updates` streaming and safe projection. Deep Agents/LangSmith tracing remains provider/environment-driven; product-visible progress stays in durable events. |
 
 ## Remaining prioritized work

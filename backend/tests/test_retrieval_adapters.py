@@ -1,4 +1,3 @@
-import httpx
 import pytest
 from app.ai.retrieval.providers.embeddings import (
     DeterministicEmbeddingProvider,
@@ -24,53 +23,49 @@ def test_deterministic_embeddings_are_stable_bounded_and_dimension_safe():
 def test_openai_compatible_provider_orders_and_validates_response(monkeypatch):
     calls = []
 
-    class Response:
-        status_code = 200
+    class Embeddings:
+        def embed_documents(self, texts):
+            calls.append(texts)
+            return [[1.0, 0.0], [0.0, 1.0]]
 
-        def json(self):
-            return {
-                "data": [
-                    {"index": 1, "embedding": [0.0, 1.0]},
-                    {"index": 0, "embedding": [1.0, 0.0]},
-                ]
-            }
-
-    def post(url, **kwargs):
-        calls.append((url, kwargs))
-        return Response()
-
-    monkeypatch.setattr(httpx, "post", post)
     provider = OpenAICompatibleEmbeddingProvider(
         api_key="secret-do-not-log",
         base_url="https://embeddings.example/v1",
         model="embedding-test",
         dimensions=2,
+        client=Embeddings(),
     )
     vectors = provider.embed(["one", "two"])
     assert vectors == [[1.0, 0.0], [0.0, 1.0]]
-    assert calls[0][0] == "https://embeddings.example/v1/embeddings"
-    assert calls[0][1]["json"]["input"] == ["one", "two"]
+    assert calls == [["one", "two"]]
 
-    class BadResponse(Response):
-        def json(self):
-            return {"data": [{"index": 0, "embedding": [1.0, 0.0, 0.0]}]}
+    class BadEmbeddings:
+        def embed_documents(self, _texts):
+            return [[1.0, 0.0, 0.0]]
 
-    monkeypatch.setattr(httpx, "post", lambda *_args, **_kwargs: BadResponse())
+    bad_provider = OpenAICompatibleEmbeddingProvider(
+        api_key="secret-do-not-log",
+        base_url="https://embeddings.example/v1",
+        model="embedding-test",
+        dimensions=2,
+        client=BadEmbeddings(),
+    )
     with pytest.raises(GroundloomError) as invalid:
-        provider.embed(["one"])
+        bad_provider.embed(["one"])
     assert invalid.value.code == "PROVIDER_INVALID_RESPONSE"
 
 
-def test_embedding_provider_outage_and_missing_configuration_are_typed(monkeypatch):
-    def post(*_args, **_kwargs):
-        raise httpx.ConnectError("provider credentials must not escape")
+def test_embedding_provider_outage_and_missing_configuration_are_typed():
+    class UnavailableEmbeddings:
+        def embed_documents(self, _texts):
+            raise RuntimeError("provider credentials must not escape")
 
-    monkeypatch.setattr(httpx, "post", post)
     provider = OpenAICompatibleEmbeddingProvider(
         api_key="secret-do-not-log",
         base_url="https://embeddings.example/v1",
         model="embedding-test",
         dimensions=2,
+        client=UnavailableEmbeddings(),
     )
     with pytest.raises(GroundloomError) as outage:
         provider.embed(["one"])

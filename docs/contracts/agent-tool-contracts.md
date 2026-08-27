@@ -14,6 +14,10 @@ Initial tool registry:
 | `TOOL-MEM-001 read_workspace_memory` | Read | Approved user-scoped memory |
 
 Each implementation defines Pydantic input/output, runtime-context scope, maximum result, timeout/retry, errors, idempotency, event/trace metadata, and approval behavior. Commit actions `accept_patch`, `publish_skill`, and direct artifact publication are deliberately not available to the primary agent.
+The executable registry consists of LangChain `BaseTool` instances. Every
+model-supplied argument is validated by an explicit bounded Pydantic
+`args_schema`; descriptions state when to use the tool, its read/proposal
+mode, and the scope it cannot broaden.
 
 Model-facing tool factories depend only on `app.ai.ports.AgentServicePort`.
 `app.integrations.ai.services.GroundloomAgentServices` binds an authorized

@@ -5,13 +5,16 @@ replace deterministic checks for citations, scope, or required structure.
 """
 
 import json
-import math
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import Any, Literal, Protocol, cast
+
+from langchain_core.exceptions import OutputParserException
+from langchain_core.prompts import ChatPromptTemplate
+from pydantic import BaseModel, ConfigDict, Field, SecretStr, ValidationError, field_validator
 
 from ...config import Settings
 from ...errors import GroundloomError
-from ..common import post_provider_json
+from ..common import raise_provider_error
 from ..prompt_loader import load_prompt
 
 
@@ -33,6 +36,27 @@ class Grade:
 
 class Grader(Protocol):
     def grade(self, text: str, citations: list[str], rubric: RubricVersion) -> Grade: ...
+
+
+class SemanticGradeResult(BaseModel):
+    """Provider output validated before it crosses into product evaluation state."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    score: float = Field(ge=0.0, le=1.0, allow_inf_nan=False)
+    verdict: Literal["pass", "needs_revision"]
+    feedback: list[str] = Field(default_factory=list, max_length=20)
+
+    @field_validator("feedback")
+    @classmethod
+    def feedback_is_bounded(cls, value: list[str]) -> list[str]:
+        if any(len(item) > 500 for item in value):
+            raise ValueError("feedback items must be at most 500 characters")
+        return value
+
+
+class StructuredGradeRunnable(Protocol):
+    def invoke(self, input: dict[str, Any]) -> Any: ...
 
 
 class DeterministicSemanticGrader:
@@ -67,7 +91,7 @@ class DeterministicSemanticGrader:
 
 @dataclass(frozen=True)
 class OpenAICompatibleSemanticGrader:
-    """Narrow structured-output evaluator adapter.
+    """LangChain structured-output evaluator adapter.
 
     The provider sees bounded draft text, citation IDs, and rubric metadata;
     Groundloom still owns deterministic citation/structure invariants.
@@ -77,13 +101,45 @@ class OpenAICompatibleSemanticGrader:
     base_url: str
     model: str
     timeout_seconds: float = 20.0
+    max_retries: int = 2
     provider_id: str = "openai-compatible"
+    runnable: StructuredGradeRunnable | None = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self.runnable is not None:
+            return
+        try:
+            from langchain_openai import ChatOpenAI
+        except ImportError as exc:
+            raise RuntimeError(
+                "Install the pinned agent extra to use the semantic evaluator"
+            ) from exc
+        model = ChatOpenAI(
+            api_key=SecretStr(self.api_key),
+            base_url=self.base_url.rstrip("/"),
+            model=self.model,
+            temperature=0,
+            timeout=self.timeout_seconds,
+            max_retries=self.max_retries,
+        )
+        prompt = ChatPromptTemplate.from_messages(
+            [
+                ("system", load_prompt("evaluator_system.txt")),
+                (
+                    "human",
+                    "Evaluate only the bounded input below and return the requested JSON object.\n\n"
+                    "{evaluation_input}",
+                ),
+            ]
+        )
+        object.__setattr__(
+            self,
+            "runnable",
+            prompt | model.with_structured_output(SemanticGradeResult, method="json_mode"),
+        )
 
     def grade(self, text: str, citations: list[str], rubric: RubricVersion) -> Grade:
-        endpoint = self.base_url.rstrip("/")
-        if not endpoint.endswith("/chat/completions"):
-            endpoint = f"{endpoint}/chat/completions"
-        prompt = {
+        evaluation_input = {
             "rubric_id": rubric.id,
             "required_terms": list(rubric.required_terms),
             "require_citations": rubric.require_citations,
@@ -91,53 +147,32 @@ class OpenAICompatibleSemanticGrader:
             "text": text[:20_000],
             "citations": citations[:100],
         }
-        body = post_provider_json(
-            endpoint,
-            api_key=self.api_key,
-            payload={
-                "model": self.model,
-                "temperature": 0,
-                "response_format": {"type": "json_object"},
-                "messages": [
-                    {
-                        "role": "system",
-                        "content": load_prompt("evaluator_system.txt"),
-                    },
-                    {"role": "user", "content": json.dumps(prompt, separators=(",", ":"))},
-                ],
-            },
-            timeout_seconds=self.timeout_seconds,
-            dependency_name="semantic evaluator",
-        )
         try:
-            content = body["choices"][0]["message"]["content"]
-            result = json.loads(content) if isinstance(content, str) else content
-            score = float(result["score"])
-            verdict = str(result["verdict"])
-            feedback = result.get("feedback", [])
-            if (
-                not math.isfinite(score)
-                or not 0.0 <= score <= 1.0
-                or verdict not in {"pass", "needs_revision"}
-                or not isinstance(feedback, list)
-                or len(feedback) > 20
-                or any(not isinstance(item, str) or len(item) > 500 for item in feedback)
-            ):
-                raise ValueError("invalid evaluator result")
-        except (
-            AttributeError,
-            IndexError,
-            KeyError,
-            TypeError,
-            ValueError,
-            json.JSONDecodeError,
-        ) as exc:
+            raw_result = cast(StructuredGradeRunnable, self.runnable).invoke(
+                {"evaluation_input": json.dumps(evaluation_input, separators=(",", ":"))}
+            )
+        except (OutputParserException, ValidationError, TypeError, ValueError) as exc:
             raise GroundloomError(
                 "PROVIDER_INVALID_RESPONSE",
                 "The semantic evaluator returned an invalid result.",
                 502,
             ) from exc
-        return Grade(rubric.id, round(score, 3), verdict, tuple(feedback))
+        except Exception as exc:
+            raise_provider_error("semantic evaluator", exc)
+        try:
+            result = SemanticGradeResult.model_validate(raw_result)
+        except ValidationError as exc:
+            raise GroundloomError(
+                "PROVIDER_INVALID_RESPONSE",
+                "The semantic evaluator returned an invalid result.",
+                502,
+            ) from exc
+        return Grade(
+            rubric.id,
+            round(result.score, 3),
+            result.verdict,
+            tuple(result.feedback),
+        )
 
 
 def build_grader(settings: Settings | None = None) -> Grader:
@@ -157,6 +192,7 @@ def build_grader(settings: Settings | None = None) -> Grader:
             base_url=settings.evaluator_base_url or "https://api.openai.com/v1",
             model=settings.evaluator_model,
             timeout_seconds=settings.evaluator_timeout_seconds,
+            max_retries=max(0, settings.agent_max_attempts - 1),
         )
     raise GroundloomError(
         "PROVIDER_MISCONFIGURED",

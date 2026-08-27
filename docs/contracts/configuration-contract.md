@@ -8,6 +8,12 @@ AI prompt assets are packaged UTF-8 text files under `backend/app/ai/prompts/`
 and loaded only through the allowlisted prompt loader. The runtime records the
 pinned `groundloom.prompt.v1` contract; an installed package must include the
 same assets as the source tree.
+The draft-only skill author resolves `model_provider:model_name` through
+LangChain `init_chat_model`, invokes a versioned `ChatPromptTemplate`, and
+validates one bounded Pydantic result. Provider credentials use the selected
+integration's standard environment configuration (for example,
+`OPENAI_API_KEY`); Groundloom stores provider, model, and prompt version as
+draft provenance and never grants the call publication authority.
 
 Feature flags do not bypass authorization/invariants and have owner, purpose, default, creation/removal date, metrics, and rollback behavior. Log a redacted effective configuration fingerprint, not secret values.
 
@@ -17,9 +23,12 @@ telemetry. Deployment settings select `checkpoint_backend=postgres`,
 `object_store_backend=s3`, a configured model provider, and
 `telemetry_provider=langfuse`; production startup rejects any local substitute.
 Optional dependency groups are `agent`, `storage`, and `observability`.
-`langchain-text-splitters==1.1.2` is a base dependency because deterministic
-source ingestion always uses its recursive splitter, independently of whether
-a model provider is configured. `source_chunk_size` (default 4000),
+`langchain-core==1.6.0` and `langchain-text-splitters==1.1.2` are base
+dependencies because model-facing tool/document contracts and deterministic
+source ingestion use their native abstractions independently of whether a
+model provider is configured. The optional `agent` group pins the tested
+LangChain, LangSmith, Deep Agents, OpenAI, Anthropic, Google, and Cohere
+integrations. `source_chunk_size` (default 4000),
 `source_chunk_overlap` (default 400), and `embedding_batch_size` (default 64)
 are bounded settings included in the redacted configuration fingerprint;
 overlap must be smaller than chunk size.
@@ -27,21 +36,23 @@ Provider calls use at most `agent_max_attempts` (default 3) with bounded
 exponential backoff; cancellation is checked before each retry.
 Embedding calls use the configured `embedding_provider`, model, fixed vector
 dimension, endpoint, and timeout. `local` uses deterministic hashing for
-credential-free development. `openai`/`openai-compatible` uses a narrow
-OpenAI-compatible `/embeddings` adapter and requires an API key; provider
+credential-free development. `openai`/`openai-compatible` uses LangChain
+`OpenAIEmbeddings` and requires an API key; provider
 outages and malformed dimensions become typed redacted dependency errors.
 `retrieval_index_backend=auto` selects the local JSON index for SQLite and the
 pgvector derived index for PostgreSQL. Production rejects an explicit local
 index. Migration `015_pgvector_source_embeddings` owns the deployment table;
 the migration role must be able to use an installed pgvector extension.
 Reranking defaults to deterministic local overlap/phrase scoring. The optional
-`cohere-compatible` reranker uses a bounded `/rerank` adapter with an explicit
-model, API key, endpoint, and timeout; missing keys, outages, and malformed
+`cohere`/`cohere-compatible` reranker uses LangChain `CohereRerank` and the
+Cohere v2 client with an explicit model, API key, API-root base URL, and
+timeout; missing keys, outages, and malformed
 scores are typed failures and never silently fall back to a different provider.
 Semantic evaluation defaults to the deterministic rubric grader. The optional
-`openai-compatible` evaluator uses bounded structured JSON from a
-`/chat/completions` adapter with an explicit model, API key, endpoint, and
-timeout; it never replaces deterministic citation or structure checks.
+`openai-compatible` evaluator uses `ChatOpenAI`, `ChatPromptTemplate`, and
+model-level Pydantic structured output with an explicit model, API key, API-root
+base URL, and timeout; it never replaces deterministic citation or structure
+checks.
 Source safety defaults to deterministic local checks for development, including
 the standard antivirus fixture, active PDF actions, and active/macro-enabled
 DOCX features. The deployment `http` scanner adapter posts bounded source

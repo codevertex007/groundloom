@@ -1,20 +1,22 @@
 """Bounded reranker adapters for retrieval candidates.
 
-The local reranker is deterministic and credential-free. The optional HTTP
-adapter follows the Cohere-compatible `/rerank` response shape without making
-provider-specific objects part of Groundloom's product contracts.
+The local reranker is deterministic and credential-free. The optional Cohere
+adapter delegates provider transport and response handling to LangChain while
+keeping provider objects outside Groundloom's product contracts.
 """
 
 from __future__ import annotations
 
 import math
 import re
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import Any, Protocol, cast
+
+from langchain_core.documents import Document
 
 from ....config import Settings
 from ....errors import GroundloomError
-from ...common import post_provider_json
+from ...common import raise_provider_error
 
 
 class Reranker(Protocol):
@@ -26,6 +28,16 @@ class Reranker(Protocol):
 
     def score(self, query: str, documents: list[str]) -> list[float]:
         """Return one bounded relevance score per input document."""
+
+
+class DocumentReranker(Protocol):
+    """The LangChain document-compressor surface consumed by this adapter."""
+
+    def compress_documents(
+        self,
+        documents: list[Document],
+        query: str,
+    ) -> Any: ...
 
 
 def _terms(value: str) -> list[str]:
@@ -53,38 +65,57 @@ class DeterministicReranker:
 
 @dataclass(frozen=True)
 class CohereCompatibleReranker:
+    """LangChain-backed Cohere v2 reranker."""
+
     api_key: str
     base_url: str
     model: str
     timeout_seconds: float = 10.0
-    provider_id: str = "cohere-compatible"
+    provider_id: str = "cohere"
+    reranker: DocumentReranker | None = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self.reranker is not None:
+            return
+        try:
+            import cohere
+            from langchain_cohere import CohereRerank
+        except ImportError as exc:
+            raise RuntimeError(
+                "Install the pinned agent extra to use Cohere reranking"
+            ) from exc
+        client = cohere.ClientV2(
+            api_key=self.api_key,
+            base_url=self.base_url.rstrip("/"),
+            timeout=self.timeout_seconds,
+            client_name="groundloom-langchain",
+        )
+        object.__setattr__(
+            self,
+            "reranker",
+            CohereRerank(client=client, model=self.model, top_n=None),
+        )
 
     def score(self, query: str, documents: list[str]) -> list[float]:
         if not documents:
             return []
-        endpoint = self.base_url.rstrip("/")
-        if not endpoint.endswith("/rerank"):
-            endpoint = f"{endpoint}/rerank"
-        body = post_provider_json(
-            endpoint,
-            api_key=self.api_key,
-            payload={
-                "model": self.model,
-                "query": query,
-                "documents": documents,
-                "top_n": len(documents),
-                "return_documents": False,
-            },
-            timeout_seconds=self.timeout_seconds,
-            dependency_name="reranker",
-        )
+        source_documents = [
+            Document(page_content=text, metadata={"groundloom_index": index})
+            for index, text in enumerate(documents)
+        ]
+        try:
+            ranked = cast(DocumentReranker, self.reranker).compress_documents(
+                source_documents,
+                query,
+            )
+        except Exception as exc:
+            raise_provider_error("reranker", exc)
         scores = [0.0] * len(documents)
         try:
-            records = body.get("results", [])
             seen: set[int] = set()
-            for record in records:
-                index = int(record["index"])
-                score = float(record["relevance_score"])
+            for document in ranked:
+                index = int(document.metadata["groundloom_index"])
+                score = float(document.metadata["relevance_score"])
                 if (
                     index < 0
                     or index >= len(documents)
@@ -119,7 +150,7 @@ def build_reranker(settings: Settings | None = None) -> Reranker:
             )
         return CohereCompatibleReranker(
             api_key=settings.reranker_api_key,
-            base_url=settings.reranker_base_url or "https://api.cohere.com/v1",
+            base_url=settings.reranker_base_url or "https://api.cohere.com",
             model=settings.reranker_model,
             timeout_seconds=settings.reranker_timeout_seconds,
         )

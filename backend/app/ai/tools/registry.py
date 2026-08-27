@@ -1,7 +1,8 @@
 """Typed assembly of the Groundloom tool surface."""
 
 from dataclasses import dataclass
-from typing import Any
+
+from langchain_core.tools import BaseTool
 
 from ..contracts import ToolContext
 from .content import build_content_tools
@@ -12,11 +13,11 @@ from .retrieval import build_source_tools
 
 @dataclass(frozen=True)
 class GroundloomToolset:
-    all_tools: tuple[Any, ...]
-    read_only: tuple[Any, ...]
-    source_research: tuple[Any, ...]
-    citation_audit: tuple[Any, ...]
-    module_writing: tuple[Any, ...]
+    all_tools: tuple[BaseTool, ...]
+    read_only: tuple[BaseTool, ...]
+    source_research: tuple[BaseTool, ...]
+    citation_audit: tuple[BaseTool, ...]
+    module_writing: tuple[BaseTool, ...]
 
 
 def build_toolset(scope: ToolContext) -> GroundloomToolset:

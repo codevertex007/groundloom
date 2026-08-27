@@ -12,12 +12,14 @@ from __future__ import annotations
 import hashlib
 import math
 import re
-from dataclasses import dataclass
-from typing import Protocol
+from dataclasses import dataclass, field
+from typing import Protocol, cast
+
+from pydantic import SecretStr
 
 from ....config import Settings
 from ....errors import GroundloomError
-from ...common import post_provider_json
+from ...common import raise_provider_error
 
 
 class EmbeddingProvider(Protocol):
@@ -32,6 +34,12 @@ class EmbeddingProvider(Protocol):
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         """Return one finite, fixed-dimension vector per input text."""
+
+
+class EmbeddingClient(Protocol):
+    """The LangChain embeddings surface consumed by this adapter."""
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]: ...
 
 
 def _validate_vectors(vectors: list[list[float]], expected: int) -> list[list[float]]:
@@ -74,31 +82,49 @@ class DeterministicEmbeddingProvider:
 
 @dataclass(frozen=True)
 class OpenAICompatibleEmbeddingProvider:
+    """LangChain-backed OpenAI-compatible embedding adapter."""
+
     api_key: str
     base_url: str
     model: str
     dimensions: int
     timeout_seconds: float = 10.0
+    max_retries: int = 2
     provider_id: str = "openai-compatible"
+    client: EmbeddingClient | None = field(default=None, repr=False, compare=False)
+
+    def __post_init__(self) -> None:
+        if self.client is not None:
+            return
+        try:
+            from langchain_openai import OpenAIEmbeddings
+        except ImportError as exc:
+            raise RuntimeError(
+                "Install the pinned agent extra to use OpenAI-compatible embeddings"
+            ) from exc
+        object.__setattr__(
+            self,
+            "client",
+            OpenAIEmbeddings(
+                api_key=SecretStr(self.api_key),
+                base_url=self.base_url.rstrip("/"),
+                model=self.model,
+                timeout=self.timeout_seconds,
+                max_retries=self.max_retries,
+                check_embedding_ctx_length=False,
+            ),
+        )
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         if not texts:
             return []
-        endpoint = self.base_url.rstrip("/")
-        if not endpoint.endswith("/embeddings"):
-            endpoint = f"{endpoint}/embeddings"
-        body = post_provider_json(
-            endpoint,
-            api_key=self.api_key,
-            payload={"model": self.model, "input": texts},
-            timeout_seconds=self.timeout_seconds,
-            dependency_name="embedding provider",
-        )
         try:
-            records = body.get("data", [])
-            ordered = sorted(records, key=lambda item: int(item["index"]))
-            vectors = [list(map(float, item["embedding"])) for item in ordered]
-        except (AttributeError, KeyError, TypeError, ValueError) as exc:
+            raw_vectors = cast(EmbeddingClient, self.client).embed_documents(texts)
+        except Exception as exc:
+            raise_provider_error("embedding provider", exc)
+        try:
+            vectors = [list(map(float, vector)) for vector in raw_vectors]
+        except (TypeError, ValueError) as exc:
             raise GroundloomError(
                 "PROVIDER_INVALID_RESPONSE",
                 "The embedding provider returned an invalid response.",
@@ -131,6 +157,7 @@ def build_embedding_provider(settings: Settings | None = None) -> EmbeddingProvi
             model=settings.embedding_model,
             dimensions=settings.embedding_dimensions,
             timeout_seconds=settings.embedding_timeout_seconds,
+            max_retries=max(0, settings.agent_max_attempts - 1),
         )
     raise GroundloomError(
         "PROVIDER_MISCONFIGURED",

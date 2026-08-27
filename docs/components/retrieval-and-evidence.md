@@ -4,8 +4,11 @@ Pipeline: trusted authorization/selected-version filter → lexical and semantic
 candidate search → deterministic hybrid score → bounded rerank → same-version
 neighbor expansion → overlap dedupe → bounded `EvidenceBundle`. The local adapter uses a
 deterministic fixed-dimension hash embedding; deployment can select the
-OpenAI-compatible embedding boundary and a pgvector-backed implementation
+LangChain `OpenAIEmbeddings` boundary and a pgvector-backed implementation
 without changing product DTOs or citation lineage.
+Optional provider reranking uses LangChain `CohereRerank` with the Cohere v2
+client; Groundloom still validates complete finite scores and restores them to
+the original authorized candidate order.
 
 `EvidencePassage` contains passage ID, source/version/name, page, section path, block ID, offsets, text, and scores. Bundles include query, passages, conflicts, gaps, and retrieval version. The model may narrow but never broaden server-computed scope. SQLite uses the rebuildable JSON vector representation; PostgreSQL `auto` mode uses the pgvector derived table for semantic candidates and reports `hybrid.pgvector.v2`. Results are normalized-deduplicated and capped by the caller's bounded limit; strong hits may contribute one adjacent block from the same immutable source version.
 

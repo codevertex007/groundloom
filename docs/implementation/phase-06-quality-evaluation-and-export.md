@@ -3,7 +3,7 @@
 ## Checklist
 
 - [x] `IMPL-06-001` Deterministic block/structure/citation/policy validators and finding schema.
-- [x] `IMPL-06-002` Versioned rubric/grader protocol, transparent deterministic baseline, and bounded OpenAI-compatible structured semantic evaluator adapter; live provider quality baselines remain deployment-specific.
+- [x] `IMPL-06-002` Versioned rubric/grader protocol, transparent deterministic baseline, and bounded LangChain ChatOpenAI/Pydantic structured semantic evaluator adapter; live provider quality baselines remain deployment-specific.
 - [x] `IMPL-06-003` Review checklist, evidence, status, override/approval/audit APIs/UI.
 - [x] `IMPL-06-004` Deterministic local evaluation runner and regression test; retrieval/trajectory/e2e release datasets remain external evidence.
 - [x] `IMPL-06-005` Render template/version and export job/artifact domain.
